@@ -1,4 +1,4 @@
-# test0320.py
+# test0320.py (サービスアカウント認証版)
 from flask import Flask, request, jsonify, redirect, url_for, render_template
 import os
 import pickle
@@ -12,12 +12,14 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import mimetypes # MIMEタイプ判別用
-
+import logging #ログ出力を強化
 
 # Google Drive API関連
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
+# --- サービスアカウント認証用のモジュール ---
+from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 
 # スケジューラ関連
@@ -26,7 +28,10 @@ from flask_apscheduler import APScheduler
 # --- 設定 ---
 # Flaskアプリケーションのインスタンスを作成
 app = Flask(__name__, static_folder='.', static_url_path='')
-app.config['SECRET_KEY'] = 'your_secret_key' # スケジューラ等でセッションを使う場合に必要
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'default-secret-key') # 環境変数から取得推奨
+# --- サービスアカウントキーファイルのパス (Render Secret Filesで設定したパス) ---
+SERVICE_ACCOUNT_FILE = '/etc/secrets/service_account.json' # ★★★ 要確認 ★★★
+
 
 # Google Drive API, Gmail API の設定
 # 'https://mail.google.com/' は通常不要なので削除しても良い場合があります
@@ -34,8 +39,9 @@ SCOPES = ['openid', 'https://www.googleapis.com/auth/drive', 'https://www.google
 FOLDER_ID = '1ju1sS1aJxyUXRZxTFXpSO-sN08UKSE0s'  # アップロード先のGoogle DriveフォルダID
 
 # メール設定 (Gmailの例) - セキュリティのため環境変数推奨
-MAIL_SERVER = 'smtp.gmail.com'
-MAIL_PORT = 587 # TLSの場合
+#MAIL_SERVER = 'smtp.gmail.com'
+#MAIL_PORT = 587 # TLSの場合
+# MAIL_USERNAME/PASSWORDはGmail API(サービスアカウント)では直接使わないが、設定は残す
 MAIL_USERNAME = os.environ.get('MAIL_USERNAME') # 環境変数から取得 (例: 'your_email@gmail.com')
 MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') # 環境変数から取得 (例: 'your_app_password')
 MAIL_SENDER_NAME = 'Time Capsule Keeper' # 送信者名
@@ -45,40 +51,24 @@ scheduler = APScheduler()
 scheduler.init_app(app)
 scheduler.start()
 
-# --- Google API 認証関数 ---
-def get_credentials():
-    """Google APIの認証情報を取得または更新する"""
-    creds = None
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            creds = pickle.load(token)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except Exception as e:
-                print(f"トークンのリフレッシュに失敗しました: {e}")
-                # リフレッシュ失敗時は再認証へ
-                if os.path.exists('token.pickle'):
-                    os.remove('token.pickle') # 古いトークンを削除
-                creds = None
-        if not creds: # credsがNone（初回またはリフレッシュ失敗）の場合
-            if not os.path.exists('credentials.json'):
-                print("credentials.json が見つかりません。")
-                return None
-            try:
-                from google_auth_oauthlib.flow import InstalledAppFlow
-                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-                creds = flow.run_local_server(port=0)
-                print("認証フローが完了しました。")
-            except Exception as e:
-                print(f"認証フロー中にエラーが発生しました: {e}")
-                return None
+# ロギング設定
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-        # 新しいクレデンシャルを保存
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
-    return creds
+# --- Google API 認証関数 (サービスアカウント版) ---
+def get_credentials():
+    """サービスアカウントキーファイルを使用してGoogle APIの認証情報を取得する"""
+    try:
+        if not os.path.exists(SERVICE_ACCOUNT_FILE):
+            logging.error(f"サービスアカウントキーファイルが見つかりません: {SERVICE_ACCOUNT_FILE}")
+            return None
+        # サービスアカウントファイルから認証情報を作成
+        creds = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        logging.info("サービスアカウント認証情報を正常に読み込みました。")
+        return creds
+    except Exception as e:
+        logging.error(f"サービスアカウント認証情報の読み込み中にエラーが発生しました: {e}", exc_info=True)
+        return None
 
 # --- Google Drive 関連関数 ---
 def get_gdrive_service():
@@ -150,45 +140,39 @@ def calculate_elapsed_period_simple(start_time):
     return period_str
 
 
-# --- メール送信関数 (Gmail API版, 添付ファイル対応) ---
-# --- メール送信関数 (Gmail API版, 添付ファイル対応, 本文生成ロジック変更) ---
-def send_reminder_email(to_email, upload_time, file_paths=None, message_body=''): # 引数変更: subject, body を削除し upload_time を追加
-    """指定されたメールアドレスにリマインドメールを送信する (Gmail APIを使用, 添付ファイル対応)"""
-    print(f"--- send_reminder_email ---") # デバッグ用
-    print(f"宛先: {to_email}")           # デバッグ用
-    print(f"アップロード日時: {upload_time}") # デバッグ用
-    print(f"ファイルパス: {file_paths}")   # デバッグ用
-    print(f"受け取ったメッセージ: '{message_body}'") # ★★★ これを追加 ★★★
-
+# --- メール送信関数 (Gmail API版, サービスアカウント認証) ---
+def send_reminder_email(to_email, upload_time, file_paths=None, message_body=''):
+    """指定されたメールアドレスにリマインドメールを送信する (Gmail API, サービスアカウント認証)"""
+    logging.info(f"--- リマインドメール送信開始: 宛先={to_email}, アップロード日時={upload_time} ---")
     if file_paths is None:
         file_paths = []
 
     try:
         creds = get_credentials()
         if not creds:
-            print("Gmail APIの認証情報の取得に失敗しました。")
+            logging.error("Gmail APIの認証情報の取得に失敗しました。")
             raise Exception("Failed to get credentials for Gmail API")
+
+        # ★★★ ドメイン全体の委任が必要な場合がある ★★★
+        # Workspace環境で、サービスアカウントに代理送信権限を与える必要があるかもしれません。
+        # もし権限がない場合、`delegated_credentials` を作成する必要があります。
+        # 例: creds = creds.with_subject(MAIL_USERNAME) # MAIL_USERNAMEは代理送信元のWorkspaceユーザーメール
+        # これが必要かは環境によります。まずは委任なしで試します。
 
         gmail_service = build('gmail', 'v1', credentials=creds)
 
         # --- メールの件名と本文を生成 ---
         subject = "あなたのタイムカプセルの開封日です"
-
-        # 経過期間を計算
         elapsed_str = calculate_elapsed_period_simple(upload_time)
-        # アップロード日時をフォーマット
         upload_time_str = upload_time.strftime('%Y年%m月%d日 %H時%M分')
-        # 添付ファイル名リストを作成 (本文表示用)
         attachment_names = [os.path.basename(fp) for fp in file_paths] if file_paths else []
-        # ★ メッセージ部分を生成 (空でない場合のみ)
         message_section = ""
-        if message_body and message_body.strip(): # 空白のみでないかもチェック
+        if message_body and message_body.strip():
             message_section = f"""
 --- あの日のあなたからのメッセージ ---
 {message_body.strip()}
 ------------------------------------
 """
-        # 新しいメール本文テンプレート
         body = f"""未来のあなたへ
 
 託したタイムカプセルが、本日、開封予定日を迎えましたことをお知らせいたします。
@@ -208,94 +192,74 @@ def send_reminder_email(to_email, upload_time, file_paths=None, message_body='')
 
 From: {MAIL_SENDER_NAME}
 """
-        # --- メールメッセージの作成 (MIMEMultipartを使用) ---
-        message = MIMEMultipart() # MIMEMultipartに変更
+        # --- メールメッセージの作成 ---
+        message = MIMEMultipart()
         message['to'] = to_email
-        sender_email = MAIL_USERNAME if MAIL_USERNAME else 'me'
-        if sender_email != 'me':
-             message['from'] = f"{Header(MAIL_SENDER_NAME, 'utf-8').encode()} <{sender_email}>"
-        else:
-             # 送信元アドレス取得 (userinfo.email スコープが必要)
-             try:
-                 profile = gmail_service.users().getProfile(userId='me').execute()
-                 sender_email = profile['emailAddress']
-                 message['from'] = f"{Header(MAIL_SENDER_NAME, 'utf-8').encode()} <{sender_email}>"
-             except HttpError as e_profile:
-                 print(f"送信元メールアドレスの取得に失敗: {e_profile}")
-                 print("環境変数 MAIL_USERNAME を設定するか、userinfo.email スコープの権限を確認してください。")
-                 message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode()
-             except Exception as e_other_profile:
-                 print(f"送信元メールアドレス取得中に予期せぬエラー: {e_other_profile}")
-                 message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode()
-
+        # サービスアカウントで送信する場合、Fromはサービスアカウント自身か、
+        # ドメイン全体の委任で指定したユーザーになります。
+        # ここでは固定の送信者名を表示します。
+        # 実際の送信元アドレスはGmail側で設定されます。
+        message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode()
         message['subject'] = Header(subject, 'utf-8')
-
-        # メール本文を追加
         message.attach(MIMEText(body, 'plain', 'utf-8'))
 
         # --- 添付ファイルの処理 ---
         for file_path in file_paths:
             if not os.path.exists(file_path):
-                print(f"添付ファイルが見つかりません: {file_path}")
-                continue # 次のファイルへ
+                logging.warning(f"添付ファイルが見つかりません: {file_path}")
+                continue
 
-            # MIMEタイプを推測
             content_type, encoding = mimetypes.guess_type(file_path)
             if content_type is None or encoding is not None:
-                content_type = 'application/octet-stream' # 不明な場合は汎用タイプ
+                content_type = 'application/octet-stream'
             main_type, sub_type = content_type.split('/', 1)
 
             try:
                 with open(file_path, 'rb') as fp:
-                    # MIMEBaseオブジェクトを作成
                     part = MIMEBase(main_type, sub_type)
-                    # ファイル内容を読み込み、Base64エンコードして設定
                     part.set_payload(fp.read())
                     encoders.encode_base64(part)
-
-                # Content-Dispositionヘッダーを設定 (ファイル名を指定)
                 filename = os.path.basename(file_path)
-                # ファイル名はRFC 2047に従ってエンコード (日本語等対応)
                 part.add_header('Content-Disposition', 'attachment', filename=filename)
-
-                # メッセージに添付
                 message.attach(part)
-                print(f"ファイル '{filename}' をメールに添付しました。")
-
+                logging.info(f"ファイル '{filename}' をメールに添付しました。")
             except Exception as e:
-                print(f"ファイル '{os.path.basename(file_path)}' の添付処理中にエラー: {e}")
-                # 特定のファイルの添付に失敗しても、他のファイルの処理は続ける
+                logging.error(f"ファイル '{os.path.basename(file_path)}' の添付処理中にエラー: {e}", exc_info=True)
 
         # --- メールの送信 ---
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         create_message = {'raw': raw_message}
 
+        # ★★★ userId='me' はサービスアカウント自身を指します ★★★
+        # ドメイン全体の委任を使用しない場合、これで動作するはずです。
+        # 委任を使用する場合は、委任先のユーザーID ('user@example.com') を指定するか、
+        # `creds.with_subject()` で作成した認証情報を使う必要があります。
         send_message = gmail_service.users().messages().send(userId='me', body=create_message).execute()
-        print(f"リマインドメールを {to_email} に送信しました (Gmail API)。 Message ID: {send_message['id']}")
+        logging.info(f"リマインドメールを {to_email} に送信しました (Gmail API)。 Message ID: {send_message['id']}")
 
+    except HttpError as error:
+        logging.error(f"Gmail APIでのメール送信中にAPIエラーが発生しました: {error}")
+        logging.error(f"エラー詳細: {error.content}")
+        # 権限エラー(403)の場合、ドメイン全体の委任が必要か確認
+        if error.resp.status == 403:
+            logging.error("権限エラー(403): サービスアカウントに必要な権限が付与されていないか、ドメイン全体の委任が必要な可能性があります。")
+        elif error.resp.status == 400:
+            logging.error(f"メール送信リクエストが無効です(400)。宛先({to_email})などを確認してください。")
     except Exception as e:
-        print(f"Gmail APIでのメール送信中にエラーが発生しました: {e}")
-        if isinstance(e, HttpError): # googleapiclientのエラーの場合
-            if e.resp.status == 403:
-                 print("権限が不足している可能性があります。必要なスコープが付与されているか、token.pickleを削除して再認証してください。")
-            elif e.resp.status == 400:
-                 print(f"メール送信リクエストが無効です。宛先({to_email})などを確認してください。")
-        elif 'invalid_grant' in str(e).lower():
-             print("認証トークンが無効または期限切れの可能性があります。token.pickleを削除して再認証してください。")
+        logging.error(f"Gmail APIでのメール送信中に予期せぬエラーが発生しました: {e}", exc_info=True)
 
     finally:
         # --- 処理完了後（成功・失敗問わず）に一時ファイルを削除 ---
-        print("メール送信処理完了。一時ファイルの削除を試みます...")
+        logging.info("メール送信処理完了。一時ファイルの削除を試みます...")
         for fp in file_paths:
             if os.path.exists(fp):
                 try:
                     os.remove(fp)
-                    print(f"一時ファイル '{os.path.basename(fp)}' を削除しました。")
+                    logging.info(f"一時ファイル '{os.path.basename(fp)}' を削除しました。")
                 except Exception as e_rem:
-                    print(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}")
+                    logging.error(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}", exc_info=True)
 
-
-# --- Flask ルート ---
+# --- Flask ルート (変更なし、ただしエラーハンドリングやログを強化推奨) ---
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
@@ -307,11 +271,12 @@ def login():
         login_status = request.form.get('login')
 
         if login_status != 'true' or username != 'ai_academy':
+            logging.warning(f"ログイン失敗: username={username}, login_status={login_status}")
             return jsonify({
                 "code": 401,
                 "msg": "Unauthorized: Incorrect username or login status"
             }), 401
-
+        logging.info(f"ログイン成功: username={username}")
         return redirect(url_for('mypage', username=username, login=login_status))
     else:
         return app.send_static_file('login.html')
@@ -322,6 +287,7 @@ def mypage():
     login = request.args.get('login')
 
     if login != 'true' or username != 'ai_academy':
+        logging.warning(f"マイページアクセス拒否: username={username}, login={login}")
         return jsonify({
             "code": 401,
             "msg": "Unauthorized: Invalid session"
@@ -332,143 +298,140 @@ def mypage():
 @app.route('/upload', methods=['GET', 'POST'])
 def upload():
     if request.method == 'POST':
+        logging.info("--- ファイルアップロード処理開始 ---")
         # --- ファイル処理 ---
         if 'file' not in request.files:
+            logging.warning("アップロードリクエストにファイルパートがありません。")
             return jsonify({"msg": "No file part"}), 400
         files = request.files.getlist('file')
         if not files or files[0].filename == '':
+             logging.warning("アップロードファイルが選択されていません。")
              return jsonify({"msg": "No selected file"}), 400
 
         # --- リマインダー情報取得 ---
         remind_datetime_str = request.form.get('remind_datetime')
         remind_email = request.form.get('remind_email')
-        # ★★★ メッセージを取得 (デフォルトは空文字) ★★★
         message_body = request.form.get('message', '')
+        upload_time = datetime.now() # アップロード時刻を記録
 
-        # ★★★ アップロード日時を取得 ★★★
-        upload_time = datetime.now()
+        logging.info(f"リマインダー情報: 日時={remind_datetime_str}, メール={remind_email}, メッセージ='{message_body[:20]}...'")
 
         if not remind_datetime_str or not remind_email:
+            logging.warning("リマインダー日時またはメールアドレスが指定されていません。")
             return jsonify({"msg": "Reminder date/time and email are required"}), 400
 
         try:
             remind_datetime_obj = datetime.strptime(remind_datetime_str, '%Y-%m-%dT%H:%M')
             if remind_datetime_obj <= datetime.now():
+                 logging.warning(f"リマインダー日時が過去です: {remind_datetime_str}")
                  return jsonify({"msg": "Reminder date/time must be in the future"}), 400
         except ValueError:
+            logging.error(f"無効な日時フォーマットです: {remind_datetime_str}")
             return jsonify({"msg": "Invalid date/time format"}), 400
 
         uploaded_filenames = []
-        uploaded_file_paths = [] # ★★★ 添付用ファイルパスリスト ★★★
+        uploaded_file_paths = []
         upload_failed = False
-        temp_files_created = [] # ★★★ 作成された一時ファイルのリスト（エラー時削除用） ★★★
+        temp_files_created = []
 
         # --- ファイルアップロード処理 ---
         for file in files:
             if file and file.filename:
-                # セキュリティのため、ファイル名をサニタイズすることを推奨
-                # from werkzeug.utils import secure_filename
-                # filename = secure_filename(file.filename)
-                filename = file.filename # 今回はそのまま使用
+                filename = file.filename # 本番環境では secure_filename を推奨
+                # 一時ファイルの保存場所を /tmp など一時ディレクトリにする方が良い場合がある
                 file_path = os.path.join('.', filename) # カレントディレクトリに保存
-                temp_files_created.append(file_path) # 作成リストに追加
+                temp_files_created.append(file_path)
 
                 try:
                     file.save(file_path)
-                    print(f"一時ファイル '{filename}' を保存しました: {file_path}")
+                    logging.info(f"一時ファイル '{filename}' を保存しました: {file_path}")
 
-                    # Google Drive にアップロード
-                    print(f"'{filename}' を Google Drive にアップロードを試みます...")
+                    logging.info(f"'{filename}' を Google Drive にアップロードを試みます...")
                     if upload_to_gdrive(file_path, filename, FOLDER_ID):
-                        print(f"'{filename}' の Google Drive へのアップロードに成功しました。")
+                        logging.info(f"'{filename}' の Google Drive へのアップロードに成功しました。")
                         uploaded_filenames.append(filename)
-                        uploaded_file_paths.append(file_path) # ★★★ 成功したファイルのパスを保持 ★★★
-                        # ここでは削除しない
+                        uploaded_file_paths.append(file_path) # 成功したファイルのパスを保持
                     else:
-                        print(f"'{filename}' の Google Drive へのアップロードに失敗しました。")
-                        upload_failed = True # 失敗フラグ
-                        # Driveアップロード失敗時は一時ファイルを削除
+                        logging.warning(f"'{filename}' の Google Drive へのアップロードに失敗しました。")
+                        upload_failed = True
                         if os.path.exists(file_path):
                             os.remove(file_path)
-                            print(f"Driveアップロード失敗のため一時ファイル '{filename}' を削除しました。")
-                            temp_files_created.remove(file_path) # 作成リストからも削除
+                            logging.info(f"Driveアップロード失敗のため一時ファイル '{filename}' を削除しました。")
+                            temp_files_created.remove(file_path)
 
                 except Exception as e:
-                    print(f"ファイル処理中にエラーが発生しました ({filename}): {e}")
+                    logging.error(f"ファイル処理中にエラーが発生しました ({filename}): {e}", exc_info=True)
                     # エラー発生時も、作成された一時ファイルをクリーンアップ
                     for fp in temp_files_created:
                         if os.path.exists(fp):
-                            try:
-                                os.remove(fp)
-                                print(f"エラー発生のため一時ファイル '{os.path.basename(fp)}' を削除しました。")
-                            except Exception as e_rem:
-                                print(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}")
+                            try: os.remove(fp)
+                            except: pass # 削除失敗は無視
                     return jsonify({"msg": f"Error processing file {filename}: {e}"}), 500
 
         # --- アップロード結果の処理 ---
         if upload_failed:
-             # 一部でも失敗した場合、成功したファイル（添付予定だった）も削除
-             print("一部のファイルのDriveアップロードに失敗しました。残存する一時ファイルを削除します。")
-             for fp in uploaded_file_paths: # uploaded_file_paths には成功したものだけが入っている
+             logging.warning("一部のファイルのDriveアップロードに失敗しました。残存する一時ファイルを削除します。")
+             for fp in uploaded_file_paths: # 成功したもの（添付予定だった）も削除
                  if os.path.exists(fp):
                      try:
                          os.remove(fp)
-                         print(f"一時ファイル '{os.path.basename(fp)}' を削除しました。")
+                         logging.info(f"一時ファイル '{os.path.basename(fp)}' を削除しました。")
                      except Exception as e_rem:
-                         print(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}")
+                         logging.error(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}", exc_info=True)
              return jsonify({"msg": "Some files failed to upload to Google Drive"}), 500
 
         # --- リマインダーメールのスケジュール ---
-        if uploaded_filenames: # 少なくとも1つのファイルが正常にアップロードされた場合
-            
+        if uploaded_filenames:
             try:
-                # スケジューラにジョブを追加
+                job_id = f'reminder_{remind_email}_{remind_datetime_obj.timestamp()}'
                 scheduler.add_job(
-                    id=f'reminder_{remind_email}_{remind_datetime_obj.timestamp()}', # ユニークなID
+                    id=job_id,
                     func=send_reminder_email,
                     trigger='date',
                     run_date=remind_datetime_obj,
-                    args=[remind_email, upload_time, uploaded_file_paths, message_body], # ★★★ ファイルパスリストを渡す ★★★
+                    args=[remind_email, upload_time, uploaded_file_paths, message_body],
                     replace_existing=True
                 )
-                print(f"リマインダーをスケジュールしました: {remind_datetime_obj} に {remind_email} へ送信（添付ファイルパス: {uploaded_file_paths}）")
-                # スケジュール成功時は、一時ファイルは send_reminder_email 関数内で削除される
+                logging.info(f"リマインダーをスケジュールしました: Job ID={job_id}, 日時={remind_datetime_obj}, 宛先={remind_email}")
+                # スケジュール成功時は一時ファイルは send_reminder_email 内で削除される
 
             except Exception as e:
-                 print(f"リマインダースケジュール中にエラー: {e}")
-                 # スケジュール失敗時は、添付予定だった一時ファイルを削除
-                 print("リマインダースケジュール失敗。一時ファイルを削除します。")
+                 logging.error(f"リマインダースケジュール中にエラー: {e}", exc_info=True)
+                 logging.warning("リマインダースケジュール失敗。一時ファイルを削除します。")
                  for fp in uploaded_file_paths:
                      if os.path.exists(fp):
-                         try:
-                             os.remove(fp)
-                             print(f"一時ファイル '{os.path.basename(fp)}' を削除しました。")
-                         except Exception as e_rem:
-                             print(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}")
+                         try: os.remove(fp)
+                         except Exception as e_rem: logging.error(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}", exc_info=True)
                  return jsonify({"msg": f"File(s) uploaded, but failed to schedule reminder: {e}"}), 500
 
+            logging.info("--- ファイルアップロード処理正常終了 ---")
             return jsonify({"msg": f"File(s) uploaded successfully and reminder set for {remind_datetime_str} with attachments"}), 200
         else:
-             # アップロードされたファイルがない場合（通常は発生しないはず）
-             print("アップロードに成功したファイルがありません。")
-             # この場合 temp_files_created は空のはずだが念のため
+             logging.warning("アップロードに成功したファイルがありません。")
+             # この場合 temp_files_created は空のはず
              for fp in temp_files_created:
                  if os.path.exists(fp):
-                     try:
-                         os.remove(fp)
-                         print(f"一時ファイル '{os.path.basename(fp)}' を削除しました。")
-                     except Exception as e_rem:
-                         print(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}")
+                     try: os.remove(fp)
+                     except Exception as e_rem: logging.error(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}", exc_info=True)
              return jsonify({"msg": "No files were successfully uploaded."}), 400
 
-    else:
-        # GETリクエストの場合は 'upload.html' を表示
+    else: # GETリクエスト
         return app.send_static_file('upload.html')
 
 # --- アプリケーションの実行 ---
 if __name__ == "__main__":
-    if not MAIL_USERNAME:
-        print("警告: 環境変数 MAIL_USERNAME が設定されていません。送信元アドレス特定のために推奨されます。")
+    # 環境変数 SECRET_KEY のチェック
+    if app.config['SECRET_KEY'] == 'default-secret-key':
+        logging.warning("警告: FlaskのSECRET_KEYがデフォルト値です。本番環境では必ず環境変数 FLASK_SECRET_KEY を設定してください。")
+    # サービスアカウントファイルの存在チェック
+    if not os.path.exists(SERVICE_ACCOUNT_FILE):
+         logging.error(f"★★★ 致命的エラー: サービスアカウントファイルが見つかりません: {SERVICE_ACCOUNT_FILE} ★★★")
+         logging.error("RenderのSecret Files設定を確認してください。")
+         # ここでアプリケーションを終了させることも検討
+         # exit(1)
 
-    # use_reloader=False は APScheduler との併用時に推奨される
-    app.run(port=8000, debug=True, use_reloader=False)
+    # Gunicornから実行される場合は __name__ == "__main__" は通らない
+    # ローカルでのデバッグ実行用
+    # use_reloader=False は APScheduler との併用時に推奨
+    logging.info("ローカルデバッグモードでアプリケーションを起動します...")
+    app.run(host='0.0.0.0', port=8000, debug=True, use_reloader=False)
