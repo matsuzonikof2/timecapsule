@@ -1,0 +1,26 @@
+unfold_less
+content_copyaddcompare_arrowsopen_in_full
+Dockerfile
+.dockerignore
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+token.pickle  # イメージに含めない
+credentials.json # イメージに含めない (環境変数で渡す想定)
+*.db # SQLiteなどを使っている場合
+venv/ # 仮想環境フォルダ
+Dockerfile
+.dockerignore
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+token.pickle  # イメージに含めない
+credentials.json # イメージに含めない (環境変数で渡す想定)
+*.db # SQLiteなどを使っている場合
+venv/ # 仮想環境フォルダ
