@@ -46,9 +46,42 @@ MAIL_USERNAME = os.environ.get('MAIL_USERNAME') # 環境変数から取得 (例:
 MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') # 環境変数から取得 (例: 'your_app_password')
 MAIL_SENDER_NAME = 'Time Capsule Keeper' # 送信者名
 
-# スケジューラの設定
+# --- SQLAlchemyJobStore の設定例 ---
+# Renderの環境変数などからデータベースURLを取得
+DATABASE_URL = os.environ.get('DATABASE_URL') # 例: postgresql://user:password@host:port/database
+# APSchedulerの設定ディクショナリ
+scheduler_config = {
+    'apscheduler.jobstores.default': {
+        'type': 'sqlalchemy',
+        'url': DATABASE_URL
+    },
+    'apscheduler.executors.default': {
+        'class': 'apscheduler.executors.pool:ThreadPoolExecutor',
+        'max_workers': '20' # 必要に応じて調整
+    },
+    'apscheduler.job_defaults.coalesce': 'false',
+    'apscheduler.job_defaults.max_instances': '3', # 必要に応じて調整
+    'apscheduler.timezone': 'UTC', # タイムゾーンを明示的に指定 (推奨)
+}
+
+# スケジューラの設定 (設定ディクショナリを渡す)
 scheduler = APScheduler()
-scheduler.init_app(app)
+# scheduler.init_app(app) の代わりに configure を使うか、
+# Flaskの設定に APSCHEDULER_ で始まるキーで設定を追加する
+app.config['SCHEDULER_JOBSTORES'] = {
+    'default': SQLAlchemyJobStore(url=DATABASE_URL)
+}
+app.config['SCHEDULER_EXECUTORS'] = {
+    'default': {'type': 'threadpool', 'max_workers': 20}
+}
+app.config['SCHEDULER_JOB_DEFAULTS'] = {
+    'coalesce': False,
+    'max_instances': 3
+}
+app.config['SCHEDULER_API_ENABLED'] = True # 必要に応じてAPIを有効化
+app.config['SCHEDULER_TIMEZONE'] = 'UTC' # タイムゾーン設定
+
+scheduler.init_app(app) # Flaskの設定から読み込ませる
 scheduler.start()
 
 # ロギング設定
