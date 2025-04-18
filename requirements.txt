@@ -22,10 +22,12 @@ oauthlib==3.2.2
 packaging==24.2
 proto-plus==1.26.1
 protobuf==6.30.2
+psycopg2-binary # PostgreSQLアダプタを追加 (Render推奨)
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pyparsing==3.2.3
 python-dateutil==2.9.0.post0
+SQLAlchemy  # SQLAlchemyを追加
 requests==2.32.3
 requests-oauthlib==2.0.0
 rsa==4.9.1
