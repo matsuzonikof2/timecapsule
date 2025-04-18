@@ -24,7 +24,7 @@ from google.auth.transport.requests import Request
 
 # スケジューラ関連
 from flask_apscheduler import APScheduler
-
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 # --- 設定 ---
 # Flaskアプリケーションのインスタンスを作成
 app = Flask(__name__, static_folder='.', static_url_path='')
