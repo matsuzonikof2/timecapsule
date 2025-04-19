@@ -61,7 +61,7 @@ MAIL_SENDER_NAME = 'Time Capsule Keeper' # 送信者名
 REDIS_URL = os.environ.get('REDIS_URL')
 redis_conn_info = {} # 接続情報辞書を初期化
 if not REDIS_URL:
-     logging.error("★★★ 致命的エラー: 環境変数 REDIS_URL が設定されていません ★★★")
+    logging.error("★★★ 致命的エラー: 環境変数 REDIS_URL が設定されていません ★★★")
     logging.error("アプリケーションを終了します。Renderの環境変数設定を確認してください。")
     sys.exit(1) # ★★★ REDIS_URLがない場合は起動しない ★★★
 else:
