@@ -14,6 +14,7 @@ from email import encoders
 import mimetypes # MIMEタイプ判別用
 import logging #ログ出力を強化
 import time # timeモジュールをインポート
+from sqlalchemy import create_engine, text
 
 # Google Drive API関連
 from googleapiclient.discovery import build
@@ -341,7 +342,24 @@ def upload():
         if not files or files[0].filename == '':
              logging.warning("アップロードファイルが選択されていません。")
              return jsonify({"msg": "No selected file"}), 400
-
+        # --- DB接続テスト ---
+        try:
+            logging.info(f"[{time.time()}] Testing database connection...")
+            # DATABASE_URL は環境変数から取得済みとする
+            engine = create_engine(DATABASE_URL)
+            start_conn_time = time.time()
+            with engine.connect() as connection: # ここで接続確立
+                end_conn_time = time.time()
+                logging.info(f"[{end_conn_time}] Database connection established in {end_conn_time - start_conn_time:.4f} seconds.")
+                start_query_time = time.time()
+                result = connection.execute(text("SELECT 1")) # 単純なクエリ実行
+                end_query_time = time.time()
+                logging.info(f"[{end_query_time}] Simple query executed in {end_query_time - start_query_time:.4f} seconds. Result: {result.scalar()}")
+            engine.dispose() # プールを閉じる
+            logging.info(f"[{time.time()}] Database connection test finished.")
+        except Exception as db_err:
+            logging.error(f"Database connection test failed: {db_err}", exc_info=True)
+        # --- DB接続テストここまで ---
         # --- リマインダー情報取得 ---
         remind_datetime_str = request.form.get('remind_datetime')
         remind_email = request.form.get('remind_email')
