@@ -15,7 +15,8 @@ import mimetypes # MIMEタイプ判別用
 import logging #ログ出力を強化
 import time # timeモジュールをインポート
 from sqlalchemy import create_engine, text
-
+import redis
+import sys
 # Google Drive API関連
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -52,16 +53,33 @@ MAIL_USERNAME = os.environ.get('MAIL_USERNAME') # 環境変数から取得 (例:
 MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') # 環境変数から取得 (例: 'your_app_password')
 MAIL_SENDER_NAME = 'Time Capsule Keeper' # 送信者名
 
-# --- SQLAlchemyJobStore の設定例 ---
+# --- SQLAlchemyJobStore の設定例 (原因不明エラーで使用中止）---
 # Renderの環境変数などからデータベースURLを取得
 #DATABASE_URL = os.environ.get('DATABASE_URL') # 例: postgresql://user:password@host:port/database
 # --- RedisJobStore の設定 ---
 # Renderの環境変数からRedis接続URLを取得
 REDIS_URL = os.environ.get('REDIS_URL')
+redis_conn_info = {} # 接続情報辞書を初期化
 if not REDIS_URL:
-    logging.error("★★★ 致命的エラー: 環境変数 REDIS_URL が設定されていません ★★★")
-    # アプリケーションを終了させるか、適切なエラー処理を行う
-    # exit(1)
+     logging.error("★★★ 致命的エラー: 環境変数 REDIS_URL が設定されていません ★★★")
+    logging.error("アプリケーションを終了します。Renderの環境変数設定を確認してください。")
+    sys.exit(1) # ★★★ REDIS_URLがない場合は起動しない ★★★
+else:
+    try:
+        # REDIS_URLをパースして接続情報を取得
+        redis_conn_info = redis.connection.parse_url(REDIS_URL)
+        # パスワードがbytes型の場合、デコードする (redis-pyのバージョンによる)
+        if 'password' in redis_conn_info and isinstance(redis_conn_info['password'], bytes):
+             redis_conn_info['password'] = redis_conn_info['password'].decode('utf-8')
+        # db番号が文字列の場合、intに変換
+        if 'db' in redis_conn_info:
+            redis_conn_info['db'] = int(redis_conn_info['db'])
+        logging.info(f"Redis接続情報をパースしました: host={redis_conn_info.get('host')}, port={redis_conn_info.get('port')}, db={redis_conn_info.get('db')}")
+    except Exception as e:
+        logging.error(f"★★★ 致命的エラー: REDIS_URL のパースに失敗しました: {REDIS_URL} ★★★")
+        logging.error(f"エラー詳細: {e}", exc_info=True)
+        logging.error("アプリケーションを終了します。")
+        sys.exit(1) # ★★★ パース失敗時も起動しない ★★★
 
 
 # APSchedulerの設定ディクショナリ
@@ -85,8 +103,9 @@ scheduler = APScheduler()
 # Flaskの設定に APSCHEDULER_ で始まるキーで設定を追加する
 app.config['SCHEDULER_JOBSTORES'] = {
    # 'default': SQLAlchemyJobStore(url=DATABASE_URL)
-    'default': RedisJobStore(url=REDIS_URL) # RedisJobStoreを使用するように変更
-
+    # --- ★★★ RedisJobStoreの初期化方法を変更 ★★★ ---
+    'default': RedisJobStore(**redis_conn_info) # パースした接続情報をキーワード引数として渡す
+    # ------------------------------------------------
 }
 app.config['SCHEDULER_EXECUTORS'] = {
     'default': {'type': 'threadpool', 'max_workers': 20}
