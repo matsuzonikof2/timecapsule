@@ -455,28 +455,28 @@ def upload():
 
         # --- リマインダーメールのスケジュール ---
         if uploaded_filenames:
-            try:
-                job_id = f'reminder_{remind_email}_{remind_datetime_obj.timestamp()}'
-                logging.info(f"[{time.time()}] Calling scheduler.add_job for {remind_email}...")
-                scheduler.add_job(
-                    id=job_id,
-                    func=send_reminder_email,
-                    trigger='date',
-                    run_date=remind_datetime_obj,
-                    args=[remind_email, upload_time, uploaded_file_paths, message_body],
-                    replace_existing=True
-                )
-                logging.info(f"[{time.time()}] scheduler.add_job finished.")
-                # スケジュール成功時は一時ファイルは send_reminder_email 内で削除される
+            # try:
+            #     job_id = f'reminder_{remind_email}_{remind_datetime_obj.timestamp()}'
+            #     logging.info(f"[{time.time()}] Calling scheduler.add_job for {remind_email}...")
+            #     scheduler.add_job(
+            #         id=job_id,
+            #         func=send_reminder_email,
+            #         trigger='date',
+            #         run_date=remind_datetime_obj,
+            #         args=[remind_email, upload_time, uploaded_file_paths, message_body],
+            #         replace_existing=True
+            #     )
+            #     logging.info(f"[{time.time()}] scheduler.add_job finished.")
+            #     # スケジュール成功時は一時ファイルは send_reminder_email 内で削除される
 
-            except Exception as e:
-                 logging.error(f"リマインダースケジュール中にエラー: {e}", exc_info=True)
-                 logging.warning("リマインダースケジュール失敗。一時ファイルを削除します。")
-                 for fp in uploaded_file_paths:
-                     if os.path.exists(fp):
-                         try: os.remove(fp)
-                         except Exception as e_rem: logging.error(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}", exc_info=True)
-                 return jsonify({"msg": f"File(s) uploaded, but failed to schedule reminder: {e}"}), 500
+            # except Exception as e:
+            #      logging.error(f"リマインダースケジュール中にエラー: {e}", exc_info=True)
+            #      logging.warning("リマインダースケジュール失敗。一時ファイルを削除します。")
+            #      for fp in uploaded_file_paths:
+            #          if os.path.exists(fp):
+            #              try: os.remove(fp)
+            #              except Exception as e_rem: logging.error(f"一時ファイル '{os.path.basename(fp)}' の削除に失敗: {e_rem}", exc_info=True)
+            #      return jsonify({"msg": f"File(s) uploaded, but failed to schedule reminder: {e}"}), 500
 
             logging.info("--- ファイルアップロード処理正常終了 ---")
             return jsonify({"msg": f"File(s) uploaded successfully and reminder set for {remind_datetime_str} with attachments"}), 200
