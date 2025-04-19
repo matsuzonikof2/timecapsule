@@ -13,6 +13,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 import mimetypes # MIMEタイプ判別用
 import logging #ログ出力を強化
+import time # timeモジュールをインポート
 
 # Google Drive API関連
 from googleapiclient.discovery import build
@@ -379,9 +380,9 @@ def upload():
                     file.save(file_path)
                     logging.info(f"一時ファイル '{filename}' を保存しました: {file_path}")
 
-                    logging.info(f"'{filename}' を Google Drive にアップロードを試みます...")
+                    logging.info(f"[{time.time()}] Calling upload_to_gdrive for {filename}...")
                     if upload_to_gdrive(file_path, filename, FOLDER_ID):
-                        logging.info(f"'{filename}' の Google Drive へのアップロードに成功しました。")
+                        logging.info(f"[{time.time()}] upload_to_gdrive for {filename} finished. Success: {success}")
                         uploaded_filenames.append(filename)
                         uploaded_file_paths.append(file_path) # 成功したファイルのパスを保持
                     else:
@@ -417,6 +418,7 @@ def upload():
         if uploaded_filenames:
             try:
                 job_id = f'reminder_{remind_email}_{remind_datetime_obj.timestamp()}'
+                logging.info(f"[{time.time()}] Calling scheduler.add_job for {remind_email}...")
                 scheduler.add_job(
                     id=job_id,
                     func=send_reminder_email,
@@ -425,7 +427,7 @@ def upload():
                     args=[remind_email, upload_time, uploaded_file_paths, message_body],
                     replace_existing=True
                 )
-                logging.info(f"リマインダーをスケジュールしました: Job ID={job_id}, 日時={remind_datetime_obj}, 宛先={remind_email}")
+                logging.info(f"[{time.time()}] scheduler.add_job finished.")
                 # スケジュール成功時は一時ファイルは send_reminder_email 内で削除される
 
             except Exception as e:
