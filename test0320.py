@@ -26,7 +26,9 @@ from google.auth.transport.requests import Request
 
 # スケジューラ関連
 from flask_apscheduler import APScheduler
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+#from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.jobstores.redis import RedisJobStore
+
 # --- 設定 ---
 #APSchedulerのデバッグログを有効化して内部動作に関する詳細ログを出力しどこに待機が発生するか把握
 logging.getLogger('apscheduler').setLevel(logging.DEBUG)
@@ -52,7 +54,16 @@ MAIL_SENDER_NAME = 'Time Capsule Keeper' # 送信者名
 
 # --- SQLAlchemyJobStore の設定例 ---
 # Renderの環境変数などからデータベースURLを取得
-DATABASE_URL = os.environ.get('DATABASE_URL') # 例: postgresql://user:password@host:port/database
+#DATABASE_URL = os.environ.get('DATABASE_URL') # 例: postgresql://user:password@host:port/database
+# --- RedisJobStore の設定 ---
+# Renderの環境変数からRedis接続URLを取得
+REDIS_URL = os.environ.get('REDIS_URL')
+if not REDIS_URL:
+    logging.error("★★★ 致命的エラー: 環境変数 REDIS_URL が設定されていません ★★★")
+    # アプリケーションを終了させるか、適切なエラー処理を行う
+    # exit(1)
+
+
 # APSchedulerの設定ディクショナリ
 scheduler_config = {
     'apscheduler.jobstores.default': {
@@ -73,7 +84,9 @@ scheduler = APScheduler()
 # scheduler.init_app(app) の代わりに configure を使うか、
 # Flaskの設定に APSCHEDULER_ で始まるキーで設定を追加する
 app.config['SCHEDULER_JOBSTORES'] = {
-    'default': SQLAlchemyJobStore(url=DATABASE_URL)
+   # 'default': SQLAlchemyJobStore(url=DATABASE_URL)
+    'default': RedisJobStore(url=REDIS_URL) # RedisJobStoreを使用するように変更
+
 }
 app.config['SCHEDULER_EXECUTORS'] = {
     'default': {'type': 'threadpool', 'max_workers': 20}
@@ -344,24 +357,7 @@ def upload():
         if not files or files[0].filename == '':
              logging.warning("アップロードファイルが選択されていません。")
              return jsonify({"msg": "No selected file"}), 400
-        # --- DB接続テスト ---
-        try:
-            logging.info(f"[{time.time()}] Testing database connection...")
-            # DATABASE_URL は環境変数から取得済みとする
-            engine = create_engine(DATABASE_URL)
-            start_conn_time = time.time()
-            with engine.connect() as connection: # ここで接続確立
-                end_conn_time = time.time()
-                logging.info(f"[{end_conn_time}] Database connection established in {end_conn_time - start_conn_time:.4f} seconds.")
-                start_query_time = time.time()
-                result = connection.execute(text("SELECT 1")) # 単純なクエリ実行
-                end_query_time = time.time()
-                logging.info(f"[{end_query_time}] Simple query executed in {end_query_time - start_query_time:.4f} seconds. Result: {result.scalar()}")
-            engine.dispose() # プールを閉じる
-            logging.info(f"[{time.time()}] Database connection test finished.")
-        except Exception as db_err:
-            logging.error(f"Database connection test failed: {db_err}", exc_info=True)
-        # --- DB接続テストここまで ---
+
         # --- リマインダー情報取得 ---
         remind_datetime_str = request.form.get('remind_datetime')
         remind_email = request.form.get('remind_email')
