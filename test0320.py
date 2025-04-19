@@ -28,6 +28,8 @@ from google.auth.transport.requests import Request
 from flask_apscheduler import APScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 # --- 設定 ---
+#APSchedulerのデバッグログを有効化して内部動作に関する詳細ログを出力しどこに待機が発生するか把握
+logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 # Flaskアプリケーションのインスタンスを作成
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'default-secret-key') # 環境変数から取得推奨
