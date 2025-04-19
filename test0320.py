@@ -65,19 +65,19 @@ if not REDIS_URL:
 
 
 # APSchedulerの設定ディクショナリ
-scheduler_config = {
-    'apscheduler.jobstores.default': {
-        'type': 'sqlalchemy',
-        'url': DATABASE_URL
-    },
-    'apscheduler.executors.default': {
-        'class': 'apscheduler.executors.pool:ThreadPoolExecutor',
-        'max_workers': '5' # 必要に応じて調整
-    },
-    'apscheduler.job_defaults.coalesce': 'false',
-    'apscheduler.job_defaults.max_instances': '1', # 必要に応じて調整
-    'apscheduler.timezone': 'UTC', # タイムゾーンを明示的に指定 (推奨)
-}
+# scheduler_config = {
+#     'apscheduler.jobstores.default': {
+#         'type': 'sqlalchemy',
+#         'url': DATABASE_URL
+#     },
+#     'apscheduler.executors.default': {
+#         'class': 'apscheduler.executors.pool:ThreadPoolExecutor',
+#         'max_workers': '5' # 必要に応じて調整
+#     },
+#     'apscheduler.job_defaults.coalesce': 'false',
+#     'apscheduler.job_defaults.max_instances': '1', # 必要に応じて調整
+#     'apscheduler.timezone': 'UTC', # タイムゾーンを明示的に指定 (推奨)
+# }
 
 # スケジューラの設定 (設定ディクショナリを渡す)
 scheduler = APScheduler()
