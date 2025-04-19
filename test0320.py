@@ -381,8 +381,12 @@ def upload():
                     logging.info(f"一時ファイル '{filename}' を保存しました: {file_path}")
 
                     logging.info(f"[{time.time()}] Calling upload_to_gdrive for {filename}...")
-                    if upload_to_gdrive(file_path, filename, FOLDER_ID):
-                        logging.info(f"[{time.time()}] upload_to_gdrive for {filename} finished. Success: {success}")
+                    # upload_to_gdrive の結果を変数に格納
+                    upload_successful = upload_to_gdrive(file_path, filename, FOLDER_ID)
+
+                    # 変数を使って条件分岐とログ出力を行う
+                    if upload_successful:
+                        logging.info(f"[{time.time()}] upload_to_gdrive for {filename} finished. Success: {upload_successful}") # 変数を使用
                         uploaded_filenames.append(filename)
                         uploaded_file_paths.append(file_path) # 成功したファイルのパスを保持
                     else:
