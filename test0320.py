@@ -58,10 +58,10 @@ scheduler_config = {
     },
     'apscheduler.executors.default': {
         'class': 'apscheduler.executors.pool:ThreadPoolExecutor',
-        'max_workers': '20' # 必要に応じて調整
+        'max_workers': '5' # 必要に応じて調整
     },
     'apscheduler.job_defaults.coalesce': 'false',
-    'apscheduler.job_defaults.max_instances': '3', # 必要に応じて調整
+    'apscheduler.job_defaults.max_instances': '1', # 必要に応じて調整
     'apscheduler.timezone': 'UTC', # タイムゾーンを明示的に指定 (推奨)
 }
 
