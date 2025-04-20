@@ -33,6 +33,7 @@ redis
 requests==2.32.3
 requests-oauthlib==2.0.0
 rsa==4.9.1
+rq
 six==1.17.0
 tzlocal==5.3.1
 uritemplate==4.1.1
