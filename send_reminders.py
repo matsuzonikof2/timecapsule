@@ -39,106 +39,50 @@ if not engine or not SessionLocal:
 
 # --- メール送信関数 (Driveダウンロード版) ---
 def send_reminder_email_with_download(to_email, upload_time, file_details, message_body=''):
-    logging.info(f"--- [Job Start] リマインドメール送信開始 (Drive Download): 宛先={to_email}, アップロード日時={upload_time} ---")
-    downloaded_temp_paths = []
-    gdrive_service = None
+    logging.info(f"--- [Job Start] シンプルメール送信テスト: 宛先={to_email} ---")
     email_sent_successfully = False
-
     try:
-        # --- 0. Google Drive サービス取得 ---
-        gdrive_service = get_gdrive_service() # common_utils からインポート
-        if not gdrive_service: logging.error("[Job] Google Driveサービスへの接続に失敗しました。ファイル添付はスキップされます。")
-
-        # --- 1. Google Driveからファイルをダウンロード ---
-        if gdrive_service and file_details:
-            logging.info(f"[Job] Google Driveから {len(file_details)} 個のファイルのダウンロードを開始します...")
-            for file_info in file_details:
-                file_id = file_info.get('id')
-                original_name = file_info.get('name')
-                if not file_id or not original_name: continue
-                # --- ★★★ 修正: common_utils の TEMP_DOWNLOAD_FOLDER を使用 ★★★ ---
-                safe_original_name = "".join(c if c.isalnum() or c in ('-', '_', '.') else '_' for c in original_name)
-                temp_download_path = os.path.join(TEMP_DOWNLOAD_FOLDER, f"downloaded_{datetime.now().timestamp()}_{safe_original_name}")
-                try:
-                    request = gdrive_service.files().get_media(fileId=file_id)
-                    fh = io.FileIO(temp_download_path, 'wb')
-                    downloader = MediaIoBaseDownload(fh, request)
-                    done = False
-                    while done is False: status, done = downloader.next_chunk()
-                    fh.close()
-                    downloaded_temp_paths.append(temp_download_path)
-                except Exception as e_download:
-                    logging.error(f"[Job] Driveダウンロードエラー (ID: {file_id}): {e_download}")
-
-        # --- 2. Gmail API 認証情報取得 ---
-        creds = get_credentials() # common_utils からインポート
+        # --- Gmail API 認証情報取得 ---
+        creds = get_credentials()
         if not creds: raise Exception("Failed to get credentials for Gmail API")
         gmail_service = build('gmail', 'v1', credentials=creds)
 
-        # --- 3. メールの件名と本文を生成 ---
-        subject = "あなたのタイムカプセルの開封日です"
-        # upload_time は timezone aware (UTC) である想定
-        elapsed_str = calculate_elapsed_period_simple(upload_time) # common_utils からインポート
-        try:
-            jst = ZoneInfo("Asia/Tokyo")
-            upload_time_jst = upload_time.astimezone(jst)
-            upload_time_str = upload_time_local.strftime('%Y年%m月%d日 %H時%M分')
-        except Exception: upload_time_str = upload_time.strftime('%Y-%m-%d %H:%M %Z')
-        message_section = f"\n--- あの日のあなたからのメッセージ ---\n{message_body.strip()}\n------------------------------------\n" if message_body and message_body.strip() else ""
-        body = f"""未来のあなたへ... (省略、以前のコードを参照) ... From: {MAIL_SENDER_NAME}""" # MAIL_SENDER_NAME は common_utils から
+        # --- シンプルな件名と本文 ---
+        subject = "【テスト】タイムカプセル開封通知"
+        body = f"これはタイムカプセルからのテストメールです。\n宛先: {to_email}\nアップロード日時(UTC): {upload_time}"
 
-        # --- 4. メールメッセージの作成 ---
-        message = MIMEMultipart()
+        # --- メールメッセージの作成 (添付なし) ---
+        message = MIMEMultipart() # 添付なくても Multipart で良い
         message['to'] = to_email
-        #message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode() # common_utils から
-        # --- ↓↓↓ Fromヘッダーを修正 ↓↓↓ ---
         if SERVICE_ACCOUNT_EMAIL:
-            # "表示名 <メールアドレス>" の形式にする
             from_address = f"{MAIL_SENDER_NAME} <{SERVICE_ACCOUNT_EMAIL}>"
-            # Headerオブジェクトは表示名部分だけをエンコードするのが一般的だが、
-            # メールアドレスも含めてエンコードしても多くの場合問題ない
             message['from'] = Header(from_address, 'utf-8').encode()
-            logging.info(f"[Job] Fromヘッダーを設定: {from_address}")
         else:
-            # フォールバック (エラーになる可能性が高い)
-            logging.warning("[Job] SERVICE_ACCOUNT_EMAILが未設定のため、Fromヘッダーが不完全です。")
             message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode()
-        message['subject'] = Header(subject, 'utf-8')
+        message['subject'] = Header(subject, 'utf-8').encode()
         message.attach(MIMEText(body, 'plain', 'utf-8'))
 
-        # --- 5. 添付ファイルの処理 ---
-        if downloaded_temp_paths: logging.info(f"[Job] {len(downloaded_temp_paths)} 個のファイルをメールに添付します...")
-        for file_path in downloaded_temp_paths:
-            content_type, encoding = mimetypes.guess_type(file_path)
-            if content_type is None or encoding is not None: content_type = 'application/octet-stream'
-            main_type, sub_type = content_type.split('/', 1)
-            try:
-                with open(file_path, 'rb') as fp: part = MIMEBase(main_type, sub_type); part.set_payload(fp.read())
-                encoders.encode_base64(part)
-                filename = os.path.basename(file_path)
-                if filename.startswith("downloaded_"): filename = filename.split('_', 2)[-1]
-                part.add_header('Content-Disposition', 'attachment', filename=Header(filename, 'utf-8').encode())
-                message.attach(part)
-            except Exception as e_attach: logging.error(f"[Job] ファイル添付エラー ({file_path}): {e_attach}")
-
-        # --- 6. メールの送信 ---
+        # --- メールの送信 ---
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         create_message = {'raw': raw_message}
-        logging.info(f"[Job] Gmail API を使用してメールを送信します (userId='me')...") # このログが出るか確認
-        send_message = gmail_service.users().messages().send(userId='me', body=create_message).execute() # ここでエラーが発生していた
-        logging.info(f"[Job] リマインドメールを {to_email} に送信しました。 Message ID: {send_message['id']}")
+        logging.info(f"[Job] Gmail API を使用してシンプルメールを送信します (userId='me')...")
+        send_message = gmail_service.users().messages().send(userId='me', body=create_message).execute()
+        logging.info(f"[Job] シンプルテストメールを {to_email} に送信しました。 Message ID: {send_message['id']}")
         email_sent_successfully = True
-    except HttpError as error: logging.error(f"[Job] Gmail APIエラー: {error}")
-    except Exception as e: logging.error(f"[Job] メール送信処理中に予期せぬエラー: {e}", exc_info=True)
+
+    except HttpError as error:
+        logging.error(f"[Job] Gmail APIエラー (シンプルテスト): {error}") # エラー内容は変わるか？
+        # エラー詳細をさらに詳しくログ出力
+        try:
+            error_details = json.loads(error.content.decode())
+            logging.error(f"[Job] Gmail APIエラー詳細 (シンプルテスト): {error_details}")
+        except:
+            logging.error(f"[Job] Gmail APIエラー内容 (raw, シンプルテスト): {error.content}")
+    except Exception as e:
+        logging.error(f"[Job] シンプルメール送信処理中に予期せぬエラー: {e}", exc_info=True)
     finally:
-        # --- 7. ダウンロードした一時ファイルを削除 ---
-        for fp in downloaded_temp_paths:
-            if os.path.exists(fp): 
-                try: 
-                    os.remove(fp)
-                except Exception as e_rem: 
-                    logging.error(f"[Job] 一時ファイル削除失敗: {fp}, Error: {e_rem}")
-        logging.info(f"--- [Job End] リマインドメール送信処理終了: 宛先={to_email}, 成功={email_sent_successfully} ---")
+        # 一時ファイル削除は不要
+        logging.info(f"--- [Job End] シンプルメール送信テスト終了: 宛先={to_email}, 成功={email_sent_successfully} ---")
         return email_sent_successfully
 
 # --- 保留中のリマインダー処理関数 ---
