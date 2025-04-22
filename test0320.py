@@ -16,6 +16,7 @@ import json
 import sys
 import threading
 from googleapiclient.http import MediaFileUpload
+from zoninfo import ZoneInfo 
 
 # --- common_utils からインポート ---
 from common_utils import (
@@ -118,11 +119,31 @@ def upload():
         upload_time = datetime.now(timezone.utc)
         if not remind_datetime_str or not remind_email: return jsonify({"msg": "Reminder date/time and email are required"}), 400
         try:
+            # --- ↓↓↓ タイムゾーン処理部分を修正 ↓↓↓ ---
+            # 1. ユーザー入力を naive datetime に変換
             remind_datetime_naive = datetime.strptime(remind_datetime_str, '%Y-%m-%dT%H:%M')
-            remind_datetime_local = remind_datetime_naive.astimezone()
-            remind_datetime_utc = remind_datetime_local.astimezone(timezone.utc)
-            if remind_datetime_utc <= datetime.now(timezone.utc): return jsonify({"msg": "Reminder date/time must be in the future"}), 400
-        except ValueError: return jsonify({"msg": "Invalid date/time format"}), 400
+
+            # 2. 日本時間 (JST) のタイムゾーン情報を取得
+            jst = ZoneInfo("Asia/Tokyo")
+
+            # 3. naive な日時を JST として解釈 (aware datetime にする)
+            remind_datetime_jst = remind_datetime_naive.replace(tzinfo=jst)
+            logging.info(f"ユーザー入力日時を JST として解釈: {remind_datetime_jst}")
+
+            # 4. JST の日時を UTC に変換してDB保存用とする
+            remind_datetime_utc = remind_datetime_jst.astimezone(timezone.utc)
+            logging.info(f"DB保存用のUTC日時に変換: {remind_datetime_utc}")
+
+            # 5. 未来の日時かチェック (比較はUTCで行う)
+            if remind_datetime_utc <= datetime.now(timezone.utc):
+                 logging.warning(f"リマインダー日時が過去です: {remind_datetime_str} (JST: {remind_datetime_jst}, UTC: {remind_datetime_utc})")
+                 return jsonify({"msg": "Reminder date/time must be in the future"}), 400
+        except ValueError:
+            logging.error(f"無効な日時フォーマットです: {remind_datetime_str}")
+            return jsonify({"msg": "Invalid date/time format"}), 400
+        except Exception as e_tz: # ZoneInfo関連のエラーも考慮
+             logging.error(f"タイムゾーン処理中にエラー: {e_tz}", exc_info=True)
+             return jsonify({"msg": "Error processing timezone."}), 500
 
         uploaded_file_details = []
         temp_file_paths = []
@@ -160,13 +181,17 @@ def upload():
         if uploaded_file_details:
             db = SessionLocal() # common_utils からインポート
             try:
-                new_reminder = Reminder( # このファイルで定義した Reminder モデル
-                    remind_email=remind_email, remind_at=remind_datetime_utc, message_body=message_body,
-                    gdrive_file_details=uploaded_file_details, upload_time=upload_time, status='pending'
+                new_reminder = Reminder(
+                    remind_email=remind_email,
+                    remind_at=remind_datetime_utc, # ★★★ UTCで保存 ★★★
+                    message_body=message_body,
+                    gdrive_file_details=uploaded_file_details,
+                    upload_time=upload_time,
+                    status='pending'
                 )
                 db.add(new_reminder)
                 db.commit()
-                logging.info(f"リマインダー情報をデータベースに保存しました。ID: {new_reminder.id}")
+                logging.info(f"リマインダー情報をデータベースに保存しました。ID: {new_reminder.id}, Email: {remind_email}, RemindAt(UTC): {remind_datetime_utc}") # ログにUTCであることを明記
             except Exception as e_db:
                 db.rollback(); logging.error(f"データベースへのリマインダー保存中にエラー: {e_db}", exc_info=True)
                 for fp in temp_file_paths:
@@ -194,10 +219,10 @@ def upload():
             weekdays_jp = ["月", "火", "水", "木", "金", "土", "日"]
             weekday_jp = weekdays_jp[remind_datetime_naive.weekday()]
             formatted_remind_date = remind_datetime_naive.strftime(f'%Y年%m月%d日({weekday_jp})')
-            success_message = f"あなたのタイムカプセルは土の中深くに埋められました。{formatted_remind_date}の開封日をお楽しみに！"
+            success_message = f"あなたのタイムカプセルは土の中深くに埋められました。開封予定日は{formatted_remind_date}です！"
         except Exception as e_fmt:
             logging.warning(f"リマインダー日時のフォーマット中にエラー: {e_fmt}")
-            success_message = f"あなたのタイムカプセルは土の中深くに埋められました。{remind_datetime_str} の開封日をお楽しみに！"
+            success_message = f"あなたのタイムカプセルは土の中深くに埋められました。開封予定日は{remind_datetime_str}です！"
         return jsonify({"msg": success_message}), 200
 
 # --- /run-cron ルート (変更なし) ---

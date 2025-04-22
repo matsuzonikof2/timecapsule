@@ -15,7 +15,7 @@ from email.header import Header
 import mimetypes
 import base64
 from googleapiclient.discovery import build # build は common_utils にも必要
-
+from zoneinfo import ZoneInfo 
 # --- common_utils からインポート ---
 from common_utils import (
     get_credentials, get_gdrive_service, calculate_elapsed_period_simple,
@@ -72,10 +72,11 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
 
         # --- 3. メールの件名と本文を生成 ---
         subject = "あなたのタイムカプセルの開封日です"
+        # upload_time は timezone aware (UTC) である想定
         elapsed_str = calculate_elapsed_period_simple(upload_time) # common_utils からインポート
         try:
-            local_tz = datetime.now().astimezone().tzinfo
-            upload_time_local = upload_time.astimezone(local_tz)
+            jst = ZoneInfo("Asia/Tokyo")
+            upload_time_jst = upload_time.astimezone(jst)
             upload_time_str = upload_time_local.strftime('%Y年%m月%d日 %H時%M分')
         except Exception: upload_time_str = upload_time.strftime('%Y-%m-%d %H:%M %Z')
         message_section = f"\n--- あの日のあなたからのメッセージ ---\n{message_body.strip()}\n------------------------------------\n" if message_body and message_body.strip() else ""
