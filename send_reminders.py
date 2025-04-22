@@ -180,8 +180,11 @@ def process_pending_reminders():
             logging.info(f"--- リマインダー処理終了: ID={reminder_id} ---")
     except Exception as e:
         logging.error(f"リマインダー処理全体でエラーが発生しました: {e}", exc_info=True)
-        if db and db.is_active: try: db.rollback()
-        except Exception as e_rollback: logging.error(f"DBロールバックエラー: {e_rollback}")
+        if db and db.is_active: 
+            try: 
+                db.rollback()
+            except Exception as e_rollback: 
+                logging.error(f"DBロールバックエラー: {e_rollback}")
     finally:
         if db: db.close()
         logging.info(f"--- 保留中のリマインダーの確認を終了。処理済み: {processed_count}件, エラー: {error_count}件 ---")
