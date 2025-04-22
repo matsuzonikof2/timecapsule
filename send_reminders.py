@@ -90,8 +90,7 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
         # --- 4. メールメッセージの作成 ---
         message = MIMEMultipart()
         message['to'] = to_email
-        message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode() # common_utils から
-        #message['subject'] = Header(subject, 'utf-8')
+        #message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode() # common_utils から
         # --- ↓↓↓ Fromヘッダーを修正 ↓↓↓ ---
         if SERVICE_ACCOUNT_EMAIL:
             # "表示名 <メールアドレス>" の形式にする
@@ -104,7 +103,7 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
             # フォールバック (エラーになる可能性が高い)
             logging.warning("[Job] SERVICE_ACCOUNT_EMAILが未設定のため、Fromヘッダーが不完全です。")
             message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode()
-        
+        message['subject'] = Header(subject, 'utf-8')
         message.attach(MIMEText(body, 'plain', 'utf-8'))
 
         # --- 5. 添付ファイルの処理 ---
