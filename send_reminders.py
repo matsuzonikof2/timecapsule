@@ -23,6 +23,11 @@ from common_utils import (
     SessionLocal, engine, # engine, SessionLocal をインポート
     TEMP_DOWNLOAD_FOLDER # ダウンロード用一時フォルダ
 )
+# ★★★ 追加: 環境変数からサービスアカウントのメールアドレスを取得 ★★★
+SERVICE_ACCOUNT_EMAIL = os.environ.get('SERVICE_ACCOUNT_EMAIL')
+if not SERVICE_ACCOUNT_EMAIL:
+    logging.warning("[Job] 環境変数 SERVICE_ACCOUNT_EMAIL が未設定です。Fromヘッダーが不完全になる可能性があります。")
+    # 必要に応じてデフォルト値を設定するか、エラーにする
 
 # --- ロギング設定 (common_utils で設定済みなら不要かも) ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [CronJob] - %(message)s')
@@ -86,7 +91,20 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
         message = MIMEMultipart()
         message['to'] = to_email
         message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode() # common_utils から
-        message['subject'] = Header(subject, 'utf-8')
+        #message['subject'] = Header(subject, 'utf-8')
+        # --- ↓↓↓ Fromヘッダーを修正 ↓↓↓ ---
+        if SERVICE_ACCOUNT_EMAIL:
+            # "表示名 <メールアドレス>" の形式にする
+            from_address = f"{MAIL_SENDER_NAME} <{SERVICE_ACCOUNT_EMAIL}>"
+            # Headerオブジェクトは表示名部分だけをエンコードするのが一般的だが、
+            # メールアドレスも含めてエンコードしても多くの場合問題ない
+            message['from'] = Header(from_address, 'utf-8').encode()
+            logging.info(f"[Job] Fromヘッダーを設定: {from_address}")
+        else:
+            # フォールバック (エラーになる可能性が高い)
+            logging.warning("[Job] SERVICE_ACCOUNT_EMAILが未設定のため、Fromヘッダーが不完全です。")
+            message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode()
+        
         message.attach(MIMEText(body, 'plain', 'utf-8'))
 
         # --- 5. 添付ファイルの処理 ---
@@ -107,10 +125,10 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
         # --- 6. メールの送信 ---
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         create_message = {'raw': raw_message}
-        send_message = gmail_service.users().messages().send(userId='me', body=create_message).execute()
+        logging.info(f"[Job] Gmail API を使用してメールを送信します (userId='me')...") # このログが出るか確認
+        send_message = gmail_service.users().messages().send(userId='me', body=create_message).execute() # ここでエラーが発生していた
         logging.info(f"[Job] リマインドメールを {to_email} に送信しました。 Message ID: {send_message['id']}")
         email_sent_successfully = True
-
     except HttpError as error: logging.error(f"[Job] Gmail APIエラー: {error}")
     except Exception as e: logging.error(f"[Job] メール送信処理中に予期せぬエラー: {e}", exc_info=True)
     finally:
