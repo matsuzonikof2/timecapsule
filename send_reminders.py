@@ -115,8 +115,11 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
     finally:
         # --- 7. ダウンロードした一時ファイルを削除 ---
         for fp in downloaded_temp_paths:
-            if os.path.exists(fp): try: os.remove(fp)
-            except Exception as e_rem: logging.error(f"[Job] 一時ファイル削除失敗: {fp}, Error: {e_rem}")
+            if os.path.exists(fp): 
+                try: 
+                    os.remove(fp)
+                except Exception as e_rem: 
+                    logging.error(f"[Job] 一時ファイル削除失敗: {fp}, Error: {e_rem}")
         logging.info(f"--- [Job End] リマインドメール送信処理終了: 宛先={to_email}, 成功={email_sent_successfully} ---")
         return email_sent_successfully
 
