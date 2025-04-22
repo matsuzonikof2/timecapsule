@@ -149,8 +149,11 @@ def upload():
         if save_error or upload_error:
             # ... (エラー処理、一時ファイル削除) ...
             for fp in temp_file_paths:
-                if os.path.exists(fp): try: os.remove(fp)
-                except Exception as e_rem: logging.error(f"エラー時の一時ファイル削除失敗: {fp}, Error: {e_rem}")
+                if os.path.exists(fp): 
+                    try: 
+                        os.remove(fp)
+                    except Exception as e_rem: 
+                        logging.error(f"エラー時の一時ファイル削除失敗: {fp}, Error: {e_rem}")
             if save_error: return jsonify({"msg": "Error saving file temporarily."}), 500
             else: return jsonify({"msg": "Failed to upload one or more files to Google Drive. Reminder not set."}), 500
 
@@ -167,8 +170,11 @@ def upload():
             except Exception as e_db:
                 db.rollback(); logging.error(f"データベースへのリマインダー保存中にエラー: {e_db}", exc_info=True)
                 for fp in temp_file_paths:
-                    if os.path.exists(fp): try: os.remove(fp)
-                    except Exception as e_rem: logging.error(f"DBエラー後の一時ファイル削除失敗: {fp}, Error: {e_rem}")
+                    if os.path.exists(fp): 
+                        try: 
+                            os.remove(fp)
+                        except Exception as e_rem: 
+                            logging.error(f"DBエラー後の一時ファイル削除失敗: {fp}, Error: {e_rem}")
                 return jsonify({"msg": "Failed to save reminder details to database."}), 500
             finally: db.close()
         else:
@@ -177,8 +183,11 @@ def upload():
 
         # --- 正常終了時の一時ファイル削除 ---
         for fp in temp_file_paths:
-            if os.path.exists(fp): try: os.remove(fp)
-            except Exception as e_rem: logging.error(f"正常終了時の一時ファイル削除失敗: {fp}, Error: {e_rem}")
+            if os.path.exists(fp): 
+                try: 
+                    os.remove(fp)
+                except Exception as e_rem: 
+                    logging.error(f"正常終了時の一時ファイル削除失敗: {fp}, Error: {e_rem}")
 
         # --- 完了メッセージ (変更済み) ---
         try:
