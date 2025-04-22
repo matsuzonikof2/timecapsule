@@ -16,7 +16,7 @@ import json
 import sys
 import threading
 from googleapiclient.http import MediaFileUpload
-from zoninfo import ZoneInfo 
+from zoneinfo import ZoneInfo 
 
 # --- common_utils からインポート ---
 from common_utils import (
