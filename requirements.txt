@@ -41,4 +41,3 @@ tzlocal==5.3.1
 uritemplate==4.1.1
 urllib3==2.4.0
 Werkzeug==3.1.3
-zoneinfo # Python 3.9未満の場合
