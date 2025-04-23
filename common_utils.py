@@ -11,10 +11,16 @@ import sys
 
 # --- 設定 ---
 SERVICE_ACCOUNT_FILE = '/etc/secrets/service_account.json'
-SCOPES = ['openid', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email']
+SCOPES = ['openid', 'https://www.googleapis.com/auth/drive',  'https://www.googleapis.com/auth/userinfo.email']
 FOLDER_ID = '1ju1sS1aJxyUXRZxTFXpSO-sN08UKSE0s'
 MAIL_SENDER_NAME = 'Time Capsule Keeper'
 DATABASE_URL = os.environ.get('DATABASE_URL')
+
+# ★★★ Mailjet 用の環境変数を追加 ★★★
+MAILJET_API_KEY = os.environ.get('MAILJET_API_KEY')
+MAILJET_SECRET_KEY = os.environ.get('MAILJET_SECRET_KEY')
+MAIL_FROM_EMAIL = os.environ.get('MAIL_FROM_EMAIL') # 送信元アドレスは共通
+
 
 # --- 一時フォルダ ---
 # (必要に応じてアップロード用とダウンロード用を分けるか、共通にする)
@@ -101,4 +107,10 @@ def calculate_elapsed_period_simple(start_time):
         elif minutes > 0: period_str = f"約{minutes}分"
         else: period_str = "ほんの少し"
     return period_str
-
+# ★★★ 初期化時のチェックに Mailjet 関連を追加 ★★★
+if not MAILJET_API_KEY:
+    logging.warning("★★★ 警告: 環境変数 MAILJET_API_KEY が設定されていません。メール送信に失敗します。 ★★★")
+if not MAILJET_SECRET_KEY:
+    logging.warning("★★★ 警告: 環境変数 MAILJET_SECRET_KEY が設定されていません。メール送信に失敗します。 ★★★")
+if not MAIL_FROM_EMAIL:
+    logging.warning("★★★ 警告: 環境変数 MAIL_FROM_EMAIL が設定されていません。メール送信に失敗します。 ★★★")

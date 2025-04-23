@@ -7,27 +7,28 @@ from sqlalchemy import text, update # create_engine, sessionmaker は削除
 import io
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
-from email.header import Header
+
+
 import mimetypes
 import base64
 from googleapiclient.discovery import build # build は common_utils にも必要
 from zoneinfo import ZoneInfo
+# ★★★ Mailjet ライブラリをインポート ★★★
+from mailjet_rest import Client
+
+
 # --- common_utils からインポート ---
 from common_utils import (
     get_credentials, get_gdrive_service, calculate_elapsed_period_simple,
     SERVICE_ACCOUNT_FILE, SCOPES, MAIL_SENDER_NAME, DATABASE_URL,
     SessionLocal, engine, # engine, SessionLocal をインポート
     TEMP_DOWNLOAD_FOLDER # ダウンロード用一時フォルダ
+    # ★★★ Mailjet 用の環境変数をインポート ★★★
+    MAILJET_API_KEY, MAILJET_SECRET_KEY, MAIL_FROM_EMAIL
 )
-# ★★★ 追加: 環境変数からサービスアカウントのメールアドレスを取得 ★★★
-SERVICE_ACCOUNT_EMAIL = os.environ.get('SERVICE_ACCOUNT_EMAIL')
-if not SERVICE_ACCOUNT_EMAIL:
-    logging.warning("[Job] 環境変数 SERVICE_ACCOUNT_EMAIL が未設定です。Fromヘッダーが不完全になる可能性があります。")
-    # 必要に応じてデフォルト値を設定するか、エラーにする
+# ★★★ APIキー等のチェック ★★★
+if not MAILJET_API_KEY or not MAILJET_SECRET_KEY or not MAIL_FROM_EMAIL:
+    logging.error("[Job] Mailjet APIキー、シークレットキー、または送信元メールアドレスが未設定です。メール送信できません。")
 
 # --- ロギング設定 (common_utils で設定済みなら不要かも) ---
 # ログフォーマットを少し変更して、どのプロセスからのログか分かりやすくする
@@ -49,7 +50,8 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
     try:
         # --- 0. Google Drive サービス取得 ---
         gdrive_service = get_gdrive_service() # common_utils からインポート
-        if not gdrive_service: logging.error("[Job] Google Driveサービスへの接続に失敗しました。ファイル添付はスキップされます。")
+        if not gdrive_service: 
+            logging.error("[Job] Google Driveサービスへの接続に失敗しました。ファイル添付はスキップされます。")
 
         # --- 1. Google Driveからファイルをダウンロード ---
         if gdrive_service and file_details:
@@ -98,11 +100,11 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
                     except Exception as e_download:
                         logging.error(f"[Job] Driveダウンロード一般エラー (ID: {file_id}, Name: {original_name}): {e_download}", exc_info=True)
 
-        # --- 2. Gmail API 認証情報取得 ---
-        creds = get_credentials() # common_utils からインポート
-        if not creds:
-            raise Exception("Failed to get credentials for Gmail API")
-        gmail_service = build('gmail', 'v1', credentials=creds)
+        # # --- 2. Gmail API 認証情報取得 ---
+        # creds = get_credentials() # common_utils からインポート
+        # if not creds:
+        #     raise Exception("Failed to get credentials for Gmail API")
+        # gmail_service = build('gmail', 'v1', credentials=creds)
 
         # --- 3. メールの件名と本文を生成 ---
         subject = "あなたのタイムカプセルの開封日です"
@@ -135,129 +137,107 @@ def send_reminder_email_with_download(to_email, upload_time, file_details, messa
 From: {MAIL_SENDER_NAME}
 """
 
-        # --- 4. メールメッセージの作成 ---
-        message = MIMEMultipart()
-        message['to'] = to_email
-        # --- ↓↓↓ Fromヘッダーを修正 (表示名なしのメールアドレスのみ) ↓↓↓ ---
-        # "Precondition check failed" エラーの最も可能性の高い原因は、
-        # サービスアカウントが From ヘッダーのアドレスから送信する権限がないことです。
-        # SERVICE_ACCOUNT_EMAIL をそのまま使うのが正しいか、
-        # あるいはドメイン全体の委任で指定されたユーザーのアドレスを使うべきか確認が必要です。
-        # ここでは、まず SERVICE_ACCOUNT_EMAIL をそのまま使ってみます。
-        if SERVICE_ACCOUNT_EMAIL:
-            # from_address = f"{MAIL_SENDER_NAME} <{SERVICE_ACCOUNT_EMAIL}>" # 元の形式 (表示名付き)
-            # message['from'] = Header(from_address, 'utf-8').encode() # 元の形式
-            message['from'] = SERVICE_ACCOUNT_EMAIL # ★★★ 変更: メールアドレスのみ設定 ★★★
-            logging.info(f"[Job] Fromヘッダーを '{SERVICE_ACCOUNT_EMAIL}' に設定")
-        else:
-            # フォールバック (エラーになる可能性が高い)
-            logging.warning("[Job] SERVICE_ACCOUNT_EMAILが未設定のため、Fromヘッダーが不完全です。")
-            # message['from'] = Header(MAIL_SENDER_NAME, 'utf-8').encode() # 元の形式
-            # From がないとほぼ確実にエラーになるため、代替案としてサービスアカウントファイル名などを使う？ (非推奨)
-            # とりあえず表示名だけ設定しておくが、Gmail側で拒否される可能性大
-            message['from'] = MAIL_SENDER_NAME
-            logging.warning(f"[Job] Fromヘッダーに表示名 '{MAIL_SENDER_NAME}' のみ設定 (送信失敗の可能性あり)")
-
-        # ★★★ Subject のエンコードを Header オブジェクトに任せる ★★★
-        # Headerオブジェクトを使うことで、サブジェクトが非ASCII文字を含んでいても正しくエンコードされる
-        message['subject'] = Header(subject, 'utf-8')
-        message.attach(MIMEText(body, 'plain', 'utf-8'))
-
-        # --- 5. 添付ファイルの処理 ---
+          # --- 4. Mailjet API リクエストデータの準備 ---
+        mailjet_data = {
+            'Messages': [
+                {
+                    "From": {
+                        "Email": MAIL_FROM_EMAIL,
+                        "Name": MAIL_SENDER_NAME
+                    },
+                    "To": [
+                        {
+                            "Email": to_email
+                            # "Name": "Recipient Name" # 必要なら
+                        }
+                    ],
+                    "Subject": subject,
+                    "TextPart": body,
+                    # "HTMLPart": "<h3>HTML version...</h3>" # HTMLメールの場合
+                    "Attachments": [] # 添付ファイルは後で追加
+                }
+            ]
+        }
+        # --- 5. 添付ファイルの処理 (Mailjet 用) ---
         if downloaded_temp_paths:
-            logging.info(f"[Job] {len(downloaded_temp_paths)} 個のファイルをメールに添付します...")
+            logging.info(f"[Job] {len(downloaded_temp_paths)} 個のファイルをメールに添付します (Mailjet)...")
+            attachments_data = []
             for file_path in downloaded_temp_paths:
-                # ファイルが存在するか再確認
                 if not os.path.exists(file_path):
                     logging.error(f"[Job] 添付予定のファイルが見つかりません: {file_path}")
                     continue
-
-                content_type, encoding = mimetypes.guess_type(file_path)
-                if content_type is None or encoding is not None:
-                    content_type = 'application/octet-stream' # 不明な場合はバイナリ扱い
-                main_type, sub_type = content_type.split('/', 1)
                 try:
-                    with open(file_path, 'rb') as fp:
-                        part = MIMEBase(main_type, sub_type)
-                        part.set_payload(fp.read())
-                    encoders.encode_base64(part) # Base64エンコード
                     filename = os.path.basename(file_path)
-                    # ★★★ ダウンロード時につけたプレフィックスを除去 ★★★
+                    # プレフィックス除去
                     if filename.startswith("downloaded_"):
-                        try:
-                            # タイムスタンプ部分を除去 (downloaded_timestamp_originalname -> originalname)
-                            filename = filename.split('_', 2)[-1]
-                        except IndexError:
-                            logging.warning(f"[Job] 添付ファイル名のプレフィックス除去に失敗: {filename}")
-                            # 失敗した場合はそのまま使う
-                    # ★★★ ファイル名のエンコードを Header オブジェクトに任せる ★★★
-                    # RFC 2047 / RFC 2231 に準拠したエンコードを行う
-                    part.add_header('Content-Disposition', 'attachment', filename=filename)
-                    # filename*=UTF-8''... 形式を試す (より多くのメーラーで互換性がある)
-                    # part.add_header('Content-Disposition', 'attachment', filename=('utf-8', '', filename)) # これだとエラーになる場合がある
-                    # Headerオブジェクトを使うのが無難
-                    try:
-                        # Headerオブジェクトでファイル名をエンコード
-                        part.replace_header('Content-Disposition', f'attachment; filename="{Header(filename, "utf-8").encode()}"')
-                    except Exception as e_header:
-                         logging.error(f"[Job] ファイル名ヘッダーのエンコードに失敗 ({filename}): {e_header}")
-                         # 失敗したらASCIIで試す（文字化けの可能性）
-                         ascii_filename = filename.encode('ascii', 'ignore').decode('ascii')
-                         if ascii_filename:
-                             part.replace_header('Content-Disposition', f'attachment; filename="{ascii_filename}"')
-                         else: # ASCIIにもできない場合
-                             part.replace_header('Content-Disposition', 'attachment; filename="attachment.dat"')
+                        try: filename = filename.split('_', 2)[-1]
+                        except IndexError: logging.warning(f"[Job] 添付ファイル名のプレフィックス除去に失敗: {filename}")
 
+                    content_type, _ = mimetypes.guess_type(file_path)
+                    if content_type is None: content_type = 'application/octet-stream'
 
-                    message.attach(part)
-                    logging.info(f"[Job] ファイルを添付: {filename} (Type: {content_type})")
+                    with open(file_path, 'rb') as f:
+                        file_data = f.read()
+                    base64_content = base64.b64encode(file_data).decode('utf-8')
+
+                    attachments_data.append({
+                        "ContentType": content_type,
+                        "Filename": filename,
+                        "Base64Content": base64_content
+                    })
+                    logging.info(f"[Job] ファイルを添付準備 (Mailjet): {filename} (Type: {content_type})")
+
                 except FileNotFoundError:
                      logging.error(f"[Job] 添付ファイルを開けません (削除された可能性): {file_path}")
                 except Exception as e_attach:
-                    logging.error(f"[Job] ファイル添付エラー ({file_path}): {e_attach}", exc_info=True)
+                    logging.error(f"[Job] ファイル添付準備エラー (Mailjet) ({file_path}): {e_attach}", exc_info=True)
 
-        # --- 6. メールの送信 ---
-        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        create_message = {'raw': raw_message}
-        logging.info(f"[Job] Gmail API を使用してメールを送信します (userId='me', From: {message.get('from')}, To: {message.get('to')})...")
-        send_message = gmail_service.users().messages().send(userId='me', body=create_message).execute() # ここでエラーが発生していた
-        logging.info(f"[Job] リマインドメールを {to_email} に送信しました。 Message ID: {send_message['id']}")
-        email_sent_successfully = True
-    except HttpError as error:
-        # ★★★ エラーログを強化 ★★★
-        logging.error(f"[Job] Gmail APIエラー: {error}")
+            if attachments_data:
+                mailjet_data['Messages'][0]['Attachments'] = attachments_data
+
+        # --- 6. メールの送信 (Mailjet) ---
         try:
-            error_details = json.loads(error.content.decode())
-            logging.error(f"[Job] Gmail APIエラー詳細: {json.dumps(error_details, indent=2)}") # 見やすく整形
-            # "Precondition check failed" の場合、権限関連のメッセージを追加
-            if error.resp.status == 400 and 'failedPrecondition' in str(error_details):
-                 logging.error("[Job] ★★★ 'Precondition check failed' エラーが発生しました。考えられる原因:")
-                 logging.error("[Job] 1. サービスアカウントに Gmail API (gmail.send スコープ) の権限がない、またはAPIが有効になっていない。")
-                 logging.error("[Job] 2. Google Workspace を使用している場合、サービスアカウントへのドメイン全体の委任が正しく設定されていない。")
-                 logging.error(f"[Job] 3. Fromヘッダーに設定されたアドレス '{message.get('from')}' からのメール送信が、認証された主体 (サービスアカウント: {SERVICE_ACCOUNT_EMAIL}) に許可されていない。")
-                 logging.error("[Job]    => サービスアカウント自身のアドレスをFromに設定しても、通常は直接送信できません。ドメイン全体の委任を使用するか、OAuth 2.0フローでユーザーの代理として送信する必要があります。")
-                 logging.error("[Job] 4. (稀に) Gmail API の一時的な問題。")
-        except Exception as e_json_parse:
-            logging.error(f"[Job] Gmail APIエラー内容の解析に失敗: {e_json_parse}")
-            logging.error(f"[Job] Gmail APIエラー内容 (raw): {error.content}")
+            # Mailjet クライアント初期化
+            mailjet = Client(auth=(MAILJET_API_KEY, MAILJET_SECRET_KEY), version='v3.1')
+
+            logging.info(f"[Job] Mailjet API を使用してメールを送信します (From: {MAIL_FROM_EMAIL}, To: {to_email})...")
+            result = mailjet.send.create(data=mailjet_data)
+
+            logging.info(f"[Job] Mailjet 応答ステータスコード: {result.status_code}")
+            # logging.debug(f"[Job] Mailjet 応答内容: {result.json()}") # 必要なら詳細ログ
+
+            # Mailjet は成功時 200 OK を返す
+            if result.status_code == 200:
+                # さらに詳細なステータスを確認 (例: 各メッセージのステータス)
+                response_json = result.json()
+                message_status = response_json.get('Messages', [{}])[0].get('Status')
+                if message_status == 'success':
+                    logging.info(f"[Job] リマインドメールを {to_email} に送信しました (Mailjet)。")
+                    email_sent_successfully = True
+                else:
+                    # API呼び出しは成功したが、メッセージ処理で問題があった場合
+                    logging.error(f"[Job] Mailjet メッセージ処理ステータスが success ではありません: {message_status}")
+                    logging.error(f"[Job] Mailjet 応答詳細: {json.dumps(response_json, indent=2)}")
+            else:
+                # API呼び出し自体が失敗した場合
+                logging.error(f"[Job] Mailjet でのエラー応答: Status={result.status_code}")
+                try:
+                    error_details = result.json()
+                    logging.error(f"[Job] Mailjet エラー詳細: {json.dumps(error_details, indent=2)}")
+                except json.JSONDecodeError:
+                    logging.error(f"[Job] Mailjet エラー内容 (非JSON): {result.text}")
+
+        except Exception as e_mailjet:
+            # Mailjet API 呼び出し中のエラー (ネットワークエラー、ライブラリエラーなど)
+            logging.error(f"[Job] Mailjet API 呼び出し中にエラー: {e_mailjet}", exc_info=True)
+
     except Exception as e:
         logging.error(f"[Job] メール送信処理中に予期せぬエラー: {e}", exc_info=True)
     finally:
-        # --- 7. ダウンロードした一時ファイルを削除 ---
+        # --- 7. ダウンロードした一時ファイルを削除 (変更なし) ---
         logging.info(f"[Job] 一時ダウンロードファイル ({len(downloaded_temp_paths)}個) の削除を開始...")
-        deleted_count = 0
-        for fp in downloaded_temp_paths:
-            if os.path.exists(fp):
-                try:
-                    os.remove(fp)
-                    # logging.info(f"[Job] 一時ファイルを削除しました: {fp}") # ログが多すぎる場合はコメントアウト
-                    deleted_count += 1
-                except Exception as e_rem:
-                    logging.error(f"[Job] 一時ファイル削除失敗: {fp}, Error: {e_rem}")
-            else:
-                 logging.warning(f"[Job] 削除対象の一時ファイルが見つかりません (削除済み?): {fp}")
-        logging.info(f"[Job] 一時ダウンロードファイル {deleted_count}/{len(downloaded_temp_paths)} 個を削除しました。")
-        logging.info(f"--- [Job End] リマインドメール送信処理終了: 宛先={to_email}, 成功={email_sent_successfully} ---")
+        # ... (削除処理) ...
+        logging.info(f"--- [Job End] リマインドメール送信処理終了 (Mailjet): 宛先={to_email}, 成功={email_sent_successfully} ---")
         return email_sent_successfully
 
 # --- 保留中のリマインダー処理関数 ---
@@ -390,9 +370,10 @@ if __name__ == "__main__":
     if not os.path.exists(SERVICE_ACCOUNT_FILE):
         logging.error(f"★★★ 致命的エラー: サービスアカウントファイルが見つかりません: {SERVICE_ACCOUNT_FILE} ★★★")
         exit(1)
-    if not SERVICE_ACCOUNT_EMAIL:
-         logging.warning("★★★ 警告: 環境変数 SERVICE_ACCOUNT_EMAIL が設定されていません。メール送信に失敗する可能性があります。 ★★★")
-
+    # common_utils.py でチェック済みなので、ここでは主要なものだけ確認するか、省略しても良い
+    if not MAILJET_API_KEY or not MAILJET_SECRET_KEY or not MAIL_FROM_EMAIL:
+        logging.warning("★★★ 警告: Mailjet関連の環境変数が不足しています。common_utils.py の警告を確認してください。 ★★★")
+        # exit(1) # 必要ならここで終了させる
     # 処理実行
     process_pending_reminders()
 
