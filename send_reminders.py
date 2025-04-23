@@ -22,7 +22,7 @@ from common_utils import (
     get_credentials, get_gdrive_service, calculate_elapsed_period_simple,
     SERVICE_ACCOUNT_FILE, SCOPES, MAIL_SENDER_NAME, DATABASE_URL,
     SessionLocal, engine, # engine, SessionLocal をインポート
-    TEMP_DOWNLOAD_FOLDER # ダウンロード用一時フォルダ
+    TEMP_DOWNLOAD_FOLDER, # ダウンロード用一時フォルダ
     # ★★★ Mailjet 用の環境変数をインポート ★★★
     MAILJET_API_KEY, MAILJET_SECRET_KEY, MAIL_FROM_EMAIL
 )
