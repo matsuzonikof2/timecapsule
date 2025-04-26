@@ -2,483 +2,87 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Time Capsule - 未来へ思い出を送ろう</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>タイムカプセル - アップロード</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* 基本スタイル */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            /*background-color: #e8e4d8; /* 古い紙のような背景色 */
-            /*background-image: url('data:image/svg+xml,%3Csvg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="%239C92AC" fill-opacity="0.1" fill-rule="evenodd"%3E%3Cpath d="M5 0h1L0 6V5zM6 5v1H5z"/%3E%3C/g%3E%3C/svg%3E'); /* Subtle pattern */
-            /* ★★★ 背景画像の設定 ★★★ */
-            background-image: url('background.jpg'); /* ここに画像ファイル名を入力 */
-            background-size: cover; /* 画面全体を覆うように調整 */
-            background-position: center center; /* 画像を中央に配置 */
-            background-repeat: no-repeat; /* 画像を繰り返さない */
-            background-attachment: fixed; /* スクロールしても背景を固定 */
-            /* ★★★ ここまで ★★★ */
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            color: #4a4a4a;
-        }
-        /* カプセルコンテナ */
-        .capsule-container {
-            /* background-color: #fffaf0; /* クリーム色 */
-            background-color: rgba(255, 250, 240, 0.75); /* クリーム色をさらに透明に */
-            padding: 30px 40px;
-            border-radius: 10px;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
-            border: 1px solid #dcdcdc;
-            width: 90%;
-            max-width: 550px; /* 少し広めに */
-            text-align: center;
-        }
-        /* 見出し */
-        h1 {
-            color: #5a4a42; /* 茶色系 */
-            margin-bottom: 30px;
-            font-weight: 600;
-            border-bottom: 2px dashed #c8bdae;
-            padding-bottom: 10px;
-            display: inline-block;
-        }
-        /* ステップ共通 */
-        .step {
-            display: none; /* 最初は非表示 */
-            margin-bottom: 25px;
-            text-align: left;
-            animation: fadeIn 0.6s ease-in-out;
-        }
-        .step.active {
-            display: block;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(15px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        /* ラベル */
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #6a5a52;
-        }
-        /* 入力フィールド */
-        input[type="file"], input[type="datetime-local"], input[type="email"], textarea {
-            width: calc(100% - 24px); /* padding考慮 */
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #c8bdae;
-            border-radius: 5px;
-            font-size: 1rem;
-            background-color: #fff;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
-        }
-        input[type="file"] {
-             cursor: pointer;
-             background-color: #f8f8f8;
-        }
-        textarea {
-            resize: vertical;
-            min-height: 80px;
-        }
-        /* フィードバック表示 */
-        .feedback-text {
-            margin-top: -5px; /* 上の要素との間隔調整 */
-            margin-bottom: 15px;
-            font-size: 0.9em;
-            color: #7a6a62;
-            min-height: 1.2em; /* 高さを確保してレイアウト崩れを防ぐ */
-        }
-        /* ボタンコンテナとボタン */
-        .button-container {
-            text-align: center; /* 中央揃えに変更 */
-            margin-top: 20px;
-        }
-        button {
-            background-color: #8b735b; /* 落ち着いた茶色 */
-            color: white;
-            padding: 12px 25px;
-            border: none;
-            border-radius: 20px; /* 丸みのあるボタン */
-            cursor: pointer;
-            font-size: 1.1rem; /* 少し大きく */
-            font-weight: bold;
-            transition: background-color 0.3s ease, transform 0.1s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        button:hover {
-            background-color: #7a634b;
-            transform: translateY(-1px); /* わずかに浮き上がる */
-        }
-        button:active {
-             transform: translateY(0px);
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-        /* ナビゲーションボタン */
-        .nav-buttons {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 30px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-        }
-        .nav-buttons button {
-            background-color: #b0a091; /* やや薄い茶色 */
-            font-size: 1rem;
-            padding: 10px 20px;
-        }
-        .nav-buttons button:hover {
-            background-color: #a09081;
-        }
-        .nav-buttons button.next {
-            background-color: #8b735b;
-        }
-        .nav-buttons button.next:hover {
-            background-color: #7a634b;
-        }
-        /* ローディングと結果表示 */
-        #loading, #result {
-            margin-top: 20px;
-            font-weight: bold;
-            text-align: center;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        #loading {
-            display: none;
-            color: #8b735b;
-            font-size: 1.1em;
-        }
-        /* ローディングアニメーション（簡易版） */
-        #loading::after {
-            content: '...';
-            display: inline-block;
-            animation: loadingDots 1.5s infinite;
-        }
-        @keyframes loadingDots {
-            0%, 20% { content: '.'; }
-            40% { content: '..'; }
-            60%, 100% { content: '...'; }
-        }
-        #result {
-            display: none;
-        }
-        #result.success {
-            background-color: #e6f4ea;
-            color: #3c763d;
-            border: 1px solid #c3e6cb;
-        }
-        #result.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        /* 確認画面のスタイル */
-        #summary {
-            background-color: #fdfdfd;
-            border: 1px dashed #c8bdae;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            text-align: left;
-        }
-        #summary p { margin: 8px 0; }
-        #summary span { font-weight: normal; color: #555; }
+        body { padding-top: 5rem; background-color: #f8f9fa; } /* ヘッダー分のpadding */
+        .container { max-width: 720px; background-color: white; padding: 2rem; border-radius: 0.5rem; box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1); }
+        .navbar { box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); }
     </style>
 </head>
 <body>
-    <div class="capsule-container">
-        <h1>Time Capsule</h1>
-        <form id="capsule-form" action="/upload" method="POST" enctype="multipart/form-data">
-
-            <!-- Step 1: File Selection -->
-            <div class="step active" data-step="1">
-                <label for="file">1. 未来へ送りたい思い出を選んでください (複数可):</label>
-                <input type="file" id="file" name="file" multiple required>
-                <div id="file-feedback" class="feedback-text"></div>
+    <!-- ヘッダー (ナビゲーションバー) -->
+    <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">タイムカプセル</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarCollapse">
+                <ul class="navbar-nav ms-auto mb-2 mb-md-0">
+                    <li class="nav-item">
+                        <span class="navbar-text me-3">
+                            ようこそ、<strong>{{ username }}</strong> さん
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="btn btn-outline-light" href="{{ url_for('logout') }}">ログアウト</a>
+                    </li>
+                </ul>
             </div>
+        </div>
+    </nav>
 
-            <!-- Step 2: Message (Optional) -->
-            <div class="step" data-step="2">
-                <label for="message">2. 未来の自分へメッセージを残しますか？ (任意):</label>
-                <textarea id="message" name="message" placeholder="例: あの日の夕焼け、綺麗だったね。元気でやってるかい？"></textarea>
-                <div class="feedback-text"></div>
+    <!-- メインコンテンツ -->
+    <div class="container mt-5">
+        <h2 class="mb-4">タイムカプセル作成</h2>
+
+        <!-- Flashメッセージ表示エリア -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        <!-- /Flashメッセージ表示エリア -->
+
+        <form id="uploadForm" action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+            <!-- CSRFトークン (Flask-WTFを使用する場合) -->
+            <!-- {{ form.csrf_token }} -->
+            <div class="mb-3">
+                <label for="file" class="form-label">ファイルを選択 (複数可)</label>
+                <input class="form-control" type="file" id="file" name="file" multiple required>
             </div>
-
-            <!-- Step 3: Date Selection -->
-            <div class="step" data-step="3">
-                <label for="remind_datetime">3. いつ開封しますか？ (未来の日時):</label>
-                <input type="datetime-local" id="remind_datetime" name="remind_datetime" required>
-                <div id="time-feedback" class="feedback-text"></div>
-            </div>
-
-            <!-- Step 4: Email Input -->
-            <div class="step" data-step="4">
-                <label for="remind_email">4. 開封の通知はどこに送りますか？:</label>
-                <input type="email" id="remind_email" name="remind_email" required placeholder="未来からの手紙を受け取るアドレス">
-                <div class="feedback-text"></div>
-            </div>
-
-            <!-- Step 5: Confirmation & Submit -->
-            <div class="step" data-step="5">
-                <p style="font-weight: bold; margin-bottom: 15px;">5. 以下の内容でカプセルを封印します:</p>
-                <div id="summary">
-                    <p><strong><i class="fas fa-file-alt"></i> 思い出ファイル:</strong> <span id="summary-files"></span></p>
-                    <p><strong><i class="fas fa-comment-dots"></i> 未来へのメッセージ:</strong> <span id="summary-message"></span></p>
-                    <p><strong><i class="fas fa-calendar-alt"></i> 開封日:</strong> <span id="summary-date"></span></p>
-                    <p><strong><i class="fas fa-envelope"></i> 通知先メール:</strong> <span id="summary-email"></span></p>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label for="remind_datetime" class="form-label">開封日時</label>
+                    <input class="form-control" type="datetime-local" id="remind_datetime" name="remind_datetime" required>
                 </div>
-                <div class="button-container">
-                    <button type="submit" id="submit-button">
-                        <i class="fas fa-lock"></i> カプセルを封印して未来へ送る
-                    </button>
+                <div class="col-md-6">
+                    <label for="remind_email" class="form-label">通知先メールアドレス</label>
+                    <input class="form-control" type="email" id="remind_email" name="remind_email" placeholder="your_email@example.com" required>
                 </div>
             </div>
-
-            <!-- Navigation Buttons -->
-            <div class="nav-buttons">
-                <button type="button" id="prev-button" disabled><i class="fas fa-arrow-left"></i> 戻る</button>
-                <button type="button" id="next-button" class="next">次へ <i class="fas fa-arrow-right"></i></button>
+            <div class="mb-3">
+                <label for="message" class="form-label">未来の自分へのメッセージ (任意)</label>
+                <textarea class="form-control" id="message" name="message" rows="4" placeholder="数年後の自分へ..."></textarea>
             </div>
-
+            <button type="submit" class="btn btn-primary btn-lg w-100">タイムカプセルを埋める</button>
         </form>
-        <div id="loading"><i class="fas fa-spinner fa-spin"></i> 封印中... 未来への転送座標を計算しています</div>
-        <div id="result"></div>
+
+        <!-- 元のメッセージ表示用エリア (必要なら残す) -->
+        <!-- <div id="messageArea" class="mt-3"></div> -->
     </div>
 
-    <!-- Font Awesome for Icons (Optional, but adds to the feel) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-
-    <script>
-        const form = document.getElementById('capsule-form');
-        const steps = Array.from(form.querySelectorAll('.step'));
-        const prevButton = document.getElementById('prev-button');
-        const nextButton = document.getElementById('next-button');
-        const submitButton = document.getElementById('submit-button');
-        const fileInput = document.getElementById('file');
-        const fileFeedbackDiv = document.getElementById('file-feedback');
-        const messageInput = document.getElementById('message');
-        const datetimeInput = document.getElementById('remind_datetime');
-        const timeFeedbackDiv = document.getElementById('time-feedback');
-        const emailInput = document.getElementById('remind_email');
-        const loadingDiv = document.getElementById('loading');
-        const resultDiv = document.getElementById('result');
-        const summaryFiles = document.getElementById('summary-files');
-        const summaryMessage = document.getElementById('summary-message');
-        const summaryDate = document.getElementById('summary-date');
-        const summaryEmail = document.getElementById('summary-email');
-
-        let currentStep = 1;
-        const totalSteps = steps.length;
-
-        // --- Helper Functions ---
-        function updateButtons() {
-            prevButton.disabled = currentStep === 1;
-            nextButton.innerHTML = currentStep === totalSteps - 1 ? '内容を確認 <i class="fas fa-check"></i>' : '次へ <i class="fas fa-arrow-right"></i>';
-            nextButton.style.display = currentStep === totalSteps ? 'none' : 'inline-block';
-            // submitButton is inside the last step, so no need to hide/show here
-        }
-
-        function showStep(stepNumber) {
-            steps.forEach(step => {
-                step.classList.remove('active');
-                if (parseInt(step.dataset.step) === stepNumber) {
-                    step.classList.add('active');
-                }
-            });
-            currentStep = stepNumber;
-            updateButtons();
-        }
-
-        function validateStep(stepNumber) {
-            const stepElement = steps[stepNumber - 1];
-            const inputs = stepElement.querySelectorAll('input[required], textarea[required]');
-            let isValid = true;
-
-            inputs.forEach(input => {
-                // Clear previous error styles
-                input.style.borderColor = '#c8bdae';
-                const feedbackDiv = input.nextElementSibling; // Assuming feedback div is next sibling
-                 if (feedbackDiv && feedbackDiv.classList.contains('feedback-text')) {
-                     feedbackDiv.textContent = '';
-                 }
-
-
-                if (!input.value.trim() && input.required) {
-                    isValid = false;
-                    input.style.borderColor = 'red';
-                     if (feedbackDiv) feedbackDiv.textContent = 'この項目は必須です。';
-                } else {
-                     // Specific validations
-                     if (input.type === 'datetime-local' && input.value) {
-                         const selectedDate = new Date(input.value);
-                         if (selectedDate <= new Date()) {
-                             isValid = false;
-                             input.style.borderColor = 'red';
-                             if (feedbackDiv) feedbackDiv.textContent = '開封日は未来の日時を設定してください。';
-                         }
-                     }
-                     if (input.type === 'email' && input.value) {
-                         const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                         if (!emailPattern.test(input.value)) {
-                             isValid = false;
-                             input.style.borderColor = 'red';
-                             if (feedbackDiv) feedbackDiv.textContent = '有効なメールアドレス形式で入力してください。';
-                         }
-                     }
-                }
-            });
-
-             // File input specific check
-             if (stepNumber === 1 && fileInput.files.length === 0 && fileInput.required) {
-                 isValid = false;
-                 fileInput.style.borderColor = 'red';
-                 fileFeedbackDiv.textContent = 'ファイルを選択してください。';
-             }
-
-            return isValid;
-        }
-
-        function updateSummary() {
-            const files = Array.from(fileInput.files).map(f => f.name).join(', ') || 'なし';
-            const message = messageInput.value.trim() || '（メッセージなし）';
-            const dateValue = datetimeInput.value;
-            const email = emailInput.value;
-
-            summaryFiles.textContent = files;
-            summaryMessage.textContent = message;
-            summaryDate.textContent = dateValue ? new Date(dateValue).toLocaleString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '未設定';
-            summaryEmail.textContent = email || '未設定';
-        }
-
-        function calculateTimeDiff(targetDate) {
-            const now = new Date();
-            if (targetDate <= now) return '過去の日時です';
-
-            const diffMillis = targetDate - now;
-            const diffSeconds = Math.floor(diffMillis / 1000);
-            const diffMinutes = Math.floor(diffSeconds / 60);
-            const diffHours = Math.floor(diffMinutes / 60);
-            const diffDays = Math.floor(diffHours / 24);
-            const diffMonths = Math.floor(diffDays / 30.44); // Approximate months
-            const diffYears = Math.floor(diffDays / 365.25); // Approximate years
-
-            if (diffYears > 0) return `約 ${diffYears}年後に開封されます。`;
-            if (diffMonths > 0) return `約 ${diffMonths}ヶ月後に開封されます。`;
-            if (diffDays > 0) return `約 ${diffDays}日後に開封されます。`;
-            if (diffHours > 0) return `約 ${diffHours}時間後に開封されます。`;
-            if (diffMinutes > 0) return `約 ${diffMinutes}分後に開封されます。`;
-            return `まもなく開封されます。`;
-        }
-
-        // --- Event Listeners ---
-        nextButton.addEventListener('click', () => {
-            if (validateStep(currentStep)) {
-                if (currentStep < totalSteps) {
-                    if (currentStep === totalSteps - 1) { // Just before showing summary
-                        updateSummary();
-                    }
-                    showStep(currentStep + 1);
-                }
-            }
-        });
-
-        prevButton.addEventListener('click', () => {
-            if (currentStep > 1) {
-                showStep(currentStep - 1);
-            }
-        });
-
-        fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
-                fileFeedbackDiv.textContent = `${fileInput.files.length}個のファイルが選択されました。(${Array.from(fileInput.files).map(f => f.name).join(', ')})`;
-                fileInput.style.borderColor = '#c8bdae'; // Reset border on valid selection
-            } else {
-                fileFeedbackDiv.textContent = '';
-            }
-             validateStep(1); // Re-validate step 1 on change
-        });
-
-        datetimeInput.addEventListener('change', () => {
-            if (datetimeInput.value) {
-                const selectedDate = new Date(datetimeInput.value);
-                timeFeedbackDiv.textContent = calculateTimeDiff(selectedDate);
-                 validateStep(3); // Re-validate step 3 on change
-            } else {
-                timeFeedbackDiv.textContent = '';
-            }
-        });
-
-         emailInput.addEventListener('input', () => {
-             validateStep(4); // Re-validate step 4 on input
-         });
-
-
-        form.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            if (!validateStep(currentStep)) return; // Final check
-
-            loadingDiv.style.display = 'block';
-            resultDiv.style.display = 'none';
-            resultDiv.className = '';
-            submitButton.disabled = true;
-            prevButton.disabled = true;
-            form.style.opacity = '0.5'; // Visually indicate form is busy
-
-            const formData = new FormData(form);
-            // Add message explicitly if needed by backend logic different from form name
-            // if (messageInput.value.trim()) {
-            //     formData.append('message_body', messageInput.value.trim());
-            // }
-
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-
-                loadingDiv.style.display = 'none';
-                resultDiv.style.display = 'block';
-                submitButton.disabled = false;
-                form.style.opacity = '1';
-
-                if (response.ok) {
-                    resultDiv.innerHTML = `<i class="fas fa-check-circle"></i> カプセルは正常に封印されました！ ${data.msg || ''}<br>開封日をお楽しみに！`;
-                    resultDiv.classList.add('success');
-                    form.reset();
-                    fileFeedbackDiv.textContent = '';
-                    timeFeedbackDiv.textContent = '';
-                    showStep(1); // Reset to first step
-                } else {
-                    resultDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> エラー: ${data.msg || '封印に失敗しました。入力内容を確認してください。'}`;
-                    resultDiv.classList.add('error');
-                    prevButton.disabled = false; // Allow going back on error
-                }
-
-            } catch (error) {
-                loadingDiv.style.display = 'none';
-                resultDiv.style.display = 'block';
-                resultDiv.innerHTML = `<i class="fas fa-network-wired"></i> 通信エラーが発生しました。時間をおいて再試行してください。`;
-                resultDiv.classList.add('error');
-                submitButton.disabled = false;
-                prevButton.disabled = false;
-                form.style.opacity = '1';
-            }
-        });
-
-        // --- Initial Setup ---
-        showStep(1);
-
-    </script>
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- 必要であればカスタムJS -->
+    <!-- <script src="upload.js"></script> -->
 </body>
 </html>
