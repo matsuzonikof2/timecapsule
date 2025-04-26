@@ -58,7 +58,7 @@
 
         <form action="{{ url_for('login') }}" method="post">
             <!-- CSRFトークン (Flask-WTFを使用する場合) -->
-            <!-- {{ form.csrf_token }} -->
+
             <div class="form-floating mb-3">
                 <input type="text" class="form-control" id="username" name="username" placeholder="ユーザー名" required>
                 <label for="username">ユーザー名</label>
