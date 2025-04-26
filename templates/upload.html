@@ -7,9 +7,53 @@
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { padding-top: 5rem; background-color: #f8f9fa; } /* ヘッダー分のpadding */
-        .container { max-width: 720px; background-color: white; padding: 2rem; border-radius: 0.5rem; box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1); }
-        .navbar { box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); }
+        body {
+            padding-top: 5rem; /* ヘッダー分のpadding */
+            /* --- 背景画像設定 --- */
+            background-image: url("{{ url_for('static', filename='background.jpg') }}");
+            background-size: cover; /* 画面全体を覆うように */
+            background-position: center center; /* 中央に配置 */
+            background-repeat: no-repeat; /* 繰り返しなし */
+            background-attachment: fixed; /* スクロールしても背景を固定 */
+            min-height: 100vh; /* 画面の高さいっぱいに表示 */
+            display: flex; /* コンテナを中央揃えにするために追加 */
+            align-items: center; /* コンテナを垂直中央に */
+            justify-content: center; /* コンテナを水平中央に */
+        }
+        .container {
+            max-width: 720px;
+            /* --- 背景を少し透過させる --- */
+            background-color: rgba(255, 255, 255, 0.9); /* 白色の90%透過 */
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15); /* 影を少し濃く */
+            /* margin-top/bottom は flex で中央揃えするため不要に */
+        }
+        .navbar {
+            box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
+        }
+        /* --- ステップ表示用スタイル --- */
+        .step {
+            display: none; /* デフォルトで非表示 */
+            animation: fadeIn 0.5s; /* フェードインアニメーション */
+        }
+        .step.active {
+            display: block; /* アクティブなステップのみ表示 */
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        /* --- ボタンのマージン調整 --- */
+        .step .btn, .step .d-flex {
+            margin-top: 1.5rem;
+        }
+        /* --- ステップのヘッダー --- */
+        .step h3 {
+            color: #495057; /* 少し濃いグレー */
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -36,8 +80,8 @@
     </nav>
 
     <!-- メインコンテンツ -->
-    <div class="container mt-5">
-        <h2 class="mb-4">タイムカプセル作成</h2>
+    <div class="container"> {/* mt-5 を削除 */}
+        <h2 class="mb-4 text-center">タイムカプセル作成</h2> {/* 中央揃え */}
 
         <!-- Flashメッセージ表示エリア -->
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -53,35 +97,139 @@
         <!-- /Flashメッセージ表示エリア -->
 
         <form id="uploadForm" action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
-            <!-- CSRFトークン (Flask-WTFを使用する場合) -->
-            <div class="mb-3">
-                <label for="file" class="form-label">ファイルを選択 (複数可)</label>
-                <input class="form-control" type="file" id="file" name="file" multiple required>
-            </div>
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <label for="remind_datetime" class="form-label">開封日時</label>
-                    <input class="form-control" type="datetime-local" id="remind_datetime" name="remind_datetime" required>
+            {# CSRFトークン (Flask-WTFを使用する場合) #}
+            {# {{ form.csrf_token }} #}
+
+            <!-- ステップ1: ファイル選択 -->
+            <div id="step-1" class="step">
+                <h3 class="mb-3">ステップ1: ファイル選択</h3>
+                <div class="mb-3">
+                    <label for="file" class="form-label">未来に残したいファイルを選択してください (複数可)</label>
+                    <input class="form-control" type="file" id="file" name="file" multiple required>
+                    <div class="form-text">写真、動画、文書など、思い出のファイルをアップロードできます。</div>
                 </div>
-                <div class="col-md-6">
-                    <label for="remind_email" class="form-label">通知先メールアドレス</label>
-                    <input class="form-control" type="email" id="remind_email" name="remind_email" placeholder="your_email@example.com" required>
+                <button type="button" class="btn btn-primary w-100" onclick="nextStep(1)">次へ進む</button>
+            </div>
+
+            <!-- ステップ2: 日時とメールアドレス -->
+            <div id="step-2" class="step">
+                <h3 class="mb-3">ステップ2: 開封日時と通知先</h3>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label for="remind_datetime" class="form-label">開封日時</label>
+                        <input class="form-control" type="datetime-local" id="remind_datetime" name="remind_datetime" required>
+                        <div class="form-text">いつ、このタイムカプセルを開封しますか？</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="remind_email" class="form-label">通知先メールアドレス</label>
+                        <input class="form-control" type="email" id="remind_email" name="remind_email" placeholder="your_email@example.com" required>
+                        <div class="form-text">開封日時になったら、このアドレスに通知します。</div>
+                    </div>
                 </div>
+                 <div class="d-flex justify-content-between">
+                     <button type="button" class="btn btn-outline-secondary" onclick="prevStep(2)">戻る</button>
+                     <button type="button" class="btn btn-primary" onclick="nextStep(2)">次へ進む</button>
+                 </div>
             </div>
-            <div class="mb-3">
-                <label for="message" class="form-label">未来の自分へのメッセージ (任意)</label>
-                <textarea class="form-control" id="message" name="message" rows="4" placeholder="数年後の自分へ..."></textarea>
+
+            <!-- ステップ3: メッセージと送信 -->
+            <div id="step-3" class="step">
+                <h3 class="mb-3">ステップ3: 未来へのメッセージ</h3>
+                <div class="mb-3">
+                    <label for="message" class="form-label">未来の自分へのメッセージ (任意)</label>
+                    <textarea class="form-control" id="message" name="message" rows="5" placeholder="数年後の自分へ...&#10;今の気持ちや、未来の自分に伝えたいことを書き留めておきましょう。"></textarea> {/* placeholderに改行追加 */}
+                </div>
+                 <div class="d-flex justify-content-between">
+                     <button type="button" class="btn btn-outline-secondary" onclick="prevStep(3)">戻る</button>
+                     <button type="submit" class="btn btn-success btn-lg">タイムカプセルを埋める</button> {/* 送信ボタンの色変更 */}
+                 </div>
             </div>
-            <button type="submit" class="btn btn-primary btn-lg w-100">タイムカプセルを埋める</button>
         </form>
 
-        <!-- 元のメッセージ表示用エリア (必要なら残す) -->
-        <!-- <div id="messageArea" class="mt-3"></div> -->
     </div>
 
     <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- 必要であればカスタムJS -->
-    <!-- <script src="upload.js"></script> -->
+    <!-- ステップ制御用JavaScript -->
+    <script>
+        let currentStep = 1;
+        const totalSteps = 3;
+
+        function showStep(stepNumber) {
+            // すべてのステップを非表示
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active');
+            });
+            // 指定されたステップを表示
+            const nextStepElement = document.getElementById(`step-${stepNumber}`);
+            if (nextStepElement) {
+                nextStepElement.classList.add('active');
+                currentStep = stepNumber;
+                // 画面上部にスクロール (ステップ切り替え時に見やすくするため)
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function validateStep(step) {
+            let isValid = true;
+            if (step === 1) {
+                const fileInput = document.getElementById('file');
+                if (fileInput.files.length === 0) {
+                    alert('ファイルを選択してください。');
+                    isValid = false;
+                }
+            } else if (step === 2) {
+                const datetimeInput = document.getElementById('remind_datetime');
+                const emailInput = document.getElementById('remind_email');
+                if (!datetimeInput.value) {
+                    alert('開封日時を入力してください。');
+                    isValid = false;
+                } else {
+                    // 未来の日時かチェック
+                    const selectedDate = new Date(datetimeInput.value);
+                    const now = new Date();
+                    // タイムゾーンを考慮しない簡易比較 (サーバーサイドでのチェックが主)
+                    // 必要なら moment.js などを使うか、サーバーサイドに問い合わせる
+                    if (selectedDate <= now) {
+                        alert('開封日時は未来の日時を指定してください。');
+                        isValid = false;
+                    }
+                }
+                if (isValid && (!emailInput.value || !emailInput.checkValidity())) { // HTML5のemailバリデーションを利用
+                    alert('有効な通知先メールアドレスを入力してください。');
+                    isValid = false;
+                }
+            }
+            // ステップ3は任意入力のみなのでバリデーションなし
+            return isValid;
+        }
+
+        function nextStep(step) {
+            if (validateStep(step)) {
+                if (currentStep < totalSteps) {
+                    showStep(currentStep + 1);
+                }
+            }
+        }
+
+        function prevStep(step) {
+             if (currentStep > 1) {
+                showStep(currentStep - 1);
+            }
+        }
+
+        // ページ読み込み完了時にステップ1を表示
+        document.addEventListener('DOMContentLoaded', () => {
+            // URLパラメータやサーバーからの情報で初期ステップを制御する場合、ここにロジックを追加
+            showStep(1);
+        });
+
+        // フォーム送信時の処理 (オプション: 送信前に最終確認など)
+        // const form = document.getElementById('uploadForm');
+        // form.addEventListener('submit', function(event) {
+        //     // ここで最終確認ダイアログなどを表示できる
+        //     // event.preventDefault(); で送信を一旦停止することも可能
+        // });
+    </script>
 </body>
 </html>
