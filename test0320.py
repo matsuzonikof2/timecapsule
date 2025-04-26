@@ -316,12 +316,22 @@ def upload():
                 except Exception as e: logging.error(f"ファイル処理中にエラー ({original_filename}): {e}", exc_info=True); save_error = True; flash(f"ファイル '{original_filename}' の一時保存中にエラー。", "danger"); break
         if save_error or upload_error:
             for fp in temp_file_paths:
-                if os.path.exists(fp): try: os.remove(fp); except Exception as e_rem: logging.error(f"エラー時一時ファイル削除失敗: {fp}, Error: {e_rem}")
+                if os.path.exists(fp): 
+                    try: 
+                        os.remove(fp); 
+                    except Exception as e_rem: 
+                        logging.error(f"エラー時一時ファイル削除失敗: {fp}, Error: {e_rem}")
             return redirect(url_for('upload'))
         if not uploaded_file_details:
-            flash("アップロード成功ファイルなし。リマインダー未設定。", "warning")
+            flash("アップロードに成功したファイルがありませんでした。リマインダーは設定されません。", "warning")
+            # 一時ファイル削除 (念のため)
+            logging.info("アップロード成功ファイルがないため、一時ファイルを削除します。")
             for fp in temp_file_paths:
-                if os.path.exists(fp): try: os.remove(fp); except Exception as e_rem: logging.error(f"アップロード成功ファイル無の場合の一時ファイル削除失敗: {fp}, Error: {e_rem}")
+                if os.path.exists(fp): 
+                    try: 
+                        os.remove(fp); 
+                    except Exception as e_rem: 
+                        logging.error(f"アップロード成功ファイル無の場合の一時ファイル削除失敗: {fp}, Error: {e_rem}")
             return redirect(url_for('upload'))
 
         # ★★★ DB保存処理で user_id を追加 ★★★
@@ -344,14 +354,23 @@ def upload():
             logging.error(f"DBへのリマインダー保存中にエラー (User ID: {user_id}): {e_db}", exc_info=True)
             flash("リマインダー情報のデータベース保存に失敗しました。", "danger")
             for fp in temp_file_paths:
-                if os.path.exists(fp): try: os.remove(fp); except Exception as e_rem: logging.error(f"DBエラー後の一時ファイル削除失敗: {fp}, Error: {e_rem}")
+                if os.path.exists(fp):
+                    try:
+                        os.remove(fp);
+                    except Exception as e_rem:
+                        logging.error(f"DBエラー後の一時ファイル削除失敗: {fp}, Error: {e_rem}")
             return redirect(url_for('upload'))
         finally:
             db.close()
 
         # ... (正常終了時の一時ファイル削除、完了メッセージは変更なし) ...
+        logging.info("処理正常終了のため、一時ファイルを削除します。")
         for fp in temp_file_paths:
-            if os.path.exists(fp): try: os.remove(fp); except Exception as e_rem: logging.error(f"正常終了時の一時ファイル削除失敗: {fp}, Error: {e_rem}")
+            if os.path.exists(fp):
+                try: 
+                    os.remove(fp); 
+                except Exception as e_rem: 
+                    logging.error(f"正常終了時の一時ファイル削除失敗: {fp}, Error: {e_rem}")
         try:
             weekdays_jp = ["月", "火", "水", "木", "金", "土", "日"]; weekday_jp = weekdays_jp[remind_datetime_naive.weekday()]
             formatted_remind_date = remind_datetime_naive.strftime(f'%Y年%m月%d日({weekday_jp})')
