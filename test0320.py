@@ -38,7 +38,7 @@ except ImportError as e:
     process_pending_reminders = None
 
 # --- Flask アプリ設定 ---
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__, static_folder='.', static_url_path='', template_folder='templates')
 # 本番環境では必ず環境変数で安全なキーを設定してください。
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-should-be-changed')
 if app.config['SECRET_KEY'] == 'dev-secret-key-should-be-changed':
@@ -91,15 +91,15 @@ class User(Base):
 def init_db():
     logging.info("データベーステーブルの初期化を確認・実行します...")
     try:
-        # Base.metadata.create_all(bind=engine)
-        # テーブルが存在しない場合のみ作成する方が安全
+        # テーブルが存在しない場合のみ作成
         with engine.connect() as connection:
+            # Userテーブル
             if not engine.dialect.has_table(connection, User.__tablename__):
                 logging.info(f"テーブル '{User.__tablename__}' を作成します。")
                 User.__table__.create(bind=engine)
             else:
                 logging.info(f"テーブル '{User.__tablename__}' は既に存在します。")
-
+            # Reminderテーブル
             if not engine.dialect.has_table(connection, Reminder.__tablename__):
                 logging.info(f"テーブル '{Reminder.__tablename__}' を作成します。")
                 Reminder.__table__.create(bind=engine)
@@ -108,9 +108,16 @@ def init_db():
         logging.info("データベーステーブルの初期化確認完了。")
     except Exception as e:
         logging.error(f"データベーステーブルの作成中にエラーが発生しました: {e}", exc_info=True)
-        # エラー発生時はアプリケーションを停止させるか検討
-        # sys.exit(1)
-
+        # 本番環境では、ここでエラーが発生した場合の処理を検討 (例: アプリケーション停止)
+# ★★★ init_db() をここで呼び出す ★★★
+# Flaskアプリがインポートされる際に実行されるようにする
+try:
+    init_db()
+except Exception as e:
+    logging.critical(f"アプリケーション起動時のデータベース初期化に失敗しました: {e}", exc_info=True)
+    # 必要であればここでプログラムを終了させる処理を追加
+    # import sys
+    # sys.exit(1)
 
 # --- Google Drive アップロード関数 (get_gdrive_service を common_utils から使用) ---
 def upload_to_gdrive(file_path, file_name, folder_id):
@@ -411,13 +418,8 @@ def run_cron_job():
 # --- アプリケーション実行 ---
 if __name__ == "__main__":
     # ★★★ アプリ起動時にDBテーブルを初期化 ★★★
-    init_db()
-
-    # ... (起動時のチェックは変更なし、APP_PASSWORD のチェックは不要になる) ...
-    if app.config['SECRET_KEY'] == 'dev-secret-key-should-be-changed': logging.warning("Flask SECRET_KEYがデフォルト値のままです。")
-    if not os.path.exists(SERVICE_ACCOUNT_FILE): logging.error(f"サービスアカウントファイルが見つかりません: {SERVICE_ACCOUNT_FILE}")
-    if not os.environ.get('CRON_SECRET_KEY'): logging.warning("CRON_SECRET_KEYが未設定です。")
-    # if not os.environ.get('APP_PASSWORD') or os.environ.get('APP_PASSWORD') == 'your_password': logging.error("★★★ 起動時警告: アプリケーションのパスワード (APP_PASSWORD) が未設定またはデフォルト値です。 ★★★") # 不要
-
-    logging.info("アプリケーションを起動します...")
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8000)), debug=False, use_reloader=True)
+    #init_db()
+    # ... (起動時のチェック) ...
+    logging.info("ローカル開発サーバーを起動します...") # メッセージを少し変更
+    # ローカル開発時は use_reloader=True が便利だが、init_dbが2回呼ばれる可能性に注意
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8000)), debug=False, use_reloader=False) # Render環境では use_reloader=False が推奨
