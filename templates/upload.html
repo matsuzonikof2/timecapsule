@@ -80,8 +80,8 @@
     </nav>
 
     <!-- メインコンテンツ -->
-    <div class="container"> {/* mt-5 を削除 */}
-        <h2 class="mb-4 text-center">タイムカプセル作成</h2> {/* 中央揃え */}
+    <div class="container"> <!-- mt-5 を削除 -->
+        <h2 class="mb-4 text-center">タイムカプセル作成</h2> <!-- 中央揃え -->
 
         <!-- Flashメッセージ表示エリア -->
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -104,7 +104,7 @@
             <div id="step-1" class="step">
                 <h3 class="mb-3">ステップ1: ファイル選択</h3>
                 <div class="mb-3">
-                    <label for="file" class="form-label">未来に残したいファイルを選択してください (複数可)</label>
+                    <label for="file" class="form-label">タイムカプセルに何を埋めますか？ (複数可)</label>
                     <input class="form-control" type="file" id="file" name="file" multiple required>
                     <div class="form-text">写真、動画、文書など、思い出のファイルをアップロードできます。</div>
                 </div>
@@ -137,11 +137,11 @@
                 <h3 class="mb-3">ステップ3: 未来へのメッセージ</h3>
                 <div class="mb-3">
                     <label for="message" class="form-label">未来の自分へのメッセージ (任意)</label>
-                    <textarea class="form-control" id="message" name="message" rows="5" placeholder="数年後の自分へ...&#10;今の気持ちや、未来の自分に伝えたいことを書き留めておきましょう。"></textarea> {/* placeholderに改行追加 */}
+                    <textarea class="form-control" id="message" name="message" rows="5" placeholder="数年後の自分へ...&#10;今の気持ちや、未来の自分に伝えたいことを書き留めておきましょう。"></textarea> <!-- placeholderに改行追加 -->
                 </div>
                  <div class="d-flex justify-content-between">
                      <button type="button" class="btn btn-outline-secondary" onclick="prevStep(3)">戻る</button>
-                     <button type="submit" class="btn btn-success btn-lg">タイムカプセルを埋める</button> {/* 送信ボタンの色変更 */}
+                     <button type="submit" class="btn btn-success btn-lg">タイムカプセルを埋める</button> <!-- 送信ボタンの色変更 -->
                  </div>
             </div>
         </form>
