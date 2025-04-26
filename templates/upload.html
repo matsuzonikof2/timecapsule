@@ -54,7 +54,6 @@
 
         <form id="uploadForm" action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
             <!-- CSRFトークン (Flask-WTFを使用する場合) -->
-            <!-- {{ form.csrf_token }} -->
             <div class="mb-3">
                 <label for="file" class="form-label">ファイルを選択 (複数可)</label>
                 <input class="form-control" type="file" id="file" name="file" multiple required>
